@@ -4,10 +4,10 @@ import sys
 import argparse
 from datetime import datetime
 
-from langchain.text_splitter import CharacterTextSplitter, RecursiveCharacterTextSplitter
-from langchain.vectorstores import Chroma
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_community.vectorstores import Chroma
 from langchain.schema import Document
-from langchain.embeddings import HuggingFaceInstructEmbeddings
+from langchain_community.embeddings import HuggingFaceInstructEmbeddings
 
 # Accept the following arguments:
 #  -input_file (-i) : path to input VPL file (default: "./engwebp_vpl.xml")
@@ -114,7 +114,7 @@ embedding_function = HuggingFaceInstructEmbeddings(
     model_name=model_name,
     query_instruction=query_instruction,
     encode_kwargs = {'normalize_embeddings': True},
-    model_kwargs = {"device": "mps"}
+    model_kwargs = {"device": "cuda"}
 )
 
 # Create Chroma database
