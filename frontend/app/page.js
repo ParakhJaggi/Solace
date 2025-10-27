@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://solace-q068.onrender.com'
+const API_URL = process.env.NEXT_PUBLIC_API_URL
 
 export default function Home() {
   const [concern, setConcern] = useState('')
