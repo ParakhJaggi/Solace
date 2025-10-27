@@ -39,6 +39,13 @@ BOOK_NAMES = {
     "1JN": "1 John", "2JN": "2 John", "3JN": "3 John", "JUD": "Jude", "REV": "Revelation"
 }
 
+# New Testament books (for proper testament tagging)
+NEW_TESTAMENT_BOOKS = {
+    "MAT", "MRK", "LUK", "JHN", "ACT",
+    "ROM", "1CO", "2CO", "GAL", "EPH", "PHP", "COL", "1TH", "2TH", "1TI", "2TI", "TIT", "PHM",
+    "HEB", "JAS", "1PE", "2PE", "1JN", "2JN", "3JN", "JUD", "REV"
+}
+
 
 def parse_bible_xml(xml_file):
     """Parse the Bible XML file and group verses by chapter."""
@@ -66,12 +73,10 @@ def create_verse_chunks(verses_by_chapter, chunk_size=CHUNK_SIZE):
     print(f"\n📝 Creating verse chunks (chunk_size={chunk_size})...")
     
     records = []
-    testament = "OT"
     
     for (book, chapter), verses in sorted(verses_by_chapter.items()):
-        # Update testament marker
-        if book.upper().startswith("MAT"):
-            testament = "NT"
+        # Determine testament based on book code
+        testament = "NT" if book.upper() in NEW_TESTAMENT_BOOKS else "OT"
         
         book_name = BOOK_NAMES.get(book, book)
         

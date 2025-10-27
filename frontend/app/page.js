@@ -20,6 +20,7 @@ function parseMarkdown(text) {
 
 export default function Home() {
   const [concern, setConcern] = useState('')
+  const [tradition, setTradition] = useState('christian')
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState(null)
   const [error, setError] = useState(null)
@@ -42,7 +43,10 @@ export default function Home() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ issue: concern }),
+        body: JSON.stringify({ 
+          issue: concern,
+          tradition: tradition 
+        }),
       })
 
       if (!response.ok) {
@@ -95,6 +99,28 @@ export default function Home() {
         {/* Input Section */}
         <div className="bg-pureWhite rounded-2xl shadow-lg border border-warmBeige p-6 md:p-8 mb-8">
           <form onSubmit={handleSubmit}>
+            {/* Tradition Selector */}
+            <div className="mb-6">
+              <label 
+                htmlFor="tradition" 
+                className="block text-deepBlue font-medium mb-3 text-sm"
+              >
+                Select your faith tradition
+              </label>
+              <select
+                id="tradition"
+                value={tradition}
+                onChange={(e) => setTradition(e.target.value)}
+                className="w-full md:w-auto bg-pureWhite border-2 border-warmBeige rounded-lg px-4 py-2 
+                           focus:outline-none focus:border-softGold focus:ring-2 focus:ring-softGold focus:ring-opacity-20
+                           transition-all duration-200"
+                disabled={loading}
+              >
+                <option value="christian">Christian (Old & New Testament)</option>
+                <option value="jewish">Jewish (Torah & Tanakh)</option>
+              </select>
+            </div>
+
             <label 
               htmlFor="concern" 
               className="block text-deepBlue font-medium mb-3 text-lg"

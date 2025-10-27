@@ -95,6 +95,7 @@ app.add_middleware(
 # Request/Response models
 class RecommendRequest(BaseModel):
     issue: str
+    tradition: str = "christian"  # "christian" or "jewish"
 
 
 class Verse(BaseModel):
@@ -102,6 +103,7 @@ class Verse(BaseModel):
     text: str
     translation: str = "WEB"
     score: float
+    book_name: str = ""  # For diversity filtering
 
 
 class RecommendResponse(BaseModel):
@@ -131,17 +133,23 @@ async def health_check():
 
 # Helper functions with tracing
 @traceable(run_type="retriever", name="search_pinecone")
-async def search_pinecone(index, query: str, k: int):
+async def search_pinecone(index, query: str, k: int, testament_filter: list = None):
     """Search Pinecone for relevant verses (integrated embedding)"""
     # Pinecone automatically embeds the query text!
-    results = index.search(
-        namespace="__default__",
-        query={
+    search_params = {
+        "namespace": "__default__",
+        "query": {
             "inputs": {"text": query},
             "top_k": k
         },
-        fields=["text", "reference", "book", "book_name", "testament", "translation"]
-    )
+        "fields": ["text", "reference", "book", "book_name", "testament", "translation"]
+    }
+    
+    # Add testament filter if specified (as part of query for integrated embedding)
+    if testament_filter:
+        search_params["query"]["filter"] = {"testament": {"$in": testament_filter}}
+    
+    results = index.search(**search_params)
     
     # It's a Pydantic object - access attributes directly
     matches = []
@@ -156,16 +164,15 @@ async def search_pinecone(index, query: str, k: int):
 
 
 @traceable(run_type="parser", name="format_results")
-def format_results(matches, n: int):
-    """Format Pinecone results into verse objects"""
-    verses = []
+def format_results(matches, n: int, ensure_diversity: bool = True):
+    """Format Pinecone results into verse objects with optional book diversity"""
+    all_verses = []
     
-    for match in matches[:n]:
-        # Access Pydantic object attributes
+    # First, convert all matches to verse objects
+    for match in matches:
         score = getattr(match, '_score', getattr(match, 'score', 0))
         fields = getattr(match, 'fields', {})
         
-        # Fields might be a dict or Pydantic object
         if hasattr(fields, '__dict__'):
             fields_dict = fields.__dict__
         elif isinstance(fields, dict):
@@ -179,9 +186,34 @@ def format_results(matches, n: int):
             translation=fields_dict.get('translation', 'WEB'),
             score=float(score) if score else 0.0
         )
-        verses.append(verse)
+        # Store book name for diversity check
+        verse.book_name = fields_dict.get('book_name', '')
+        all_verses.append(verse)
     
-    return verses
+    if not ensure_diversity or len(all_verses) <= n:
+        return all_verses[:n]
+    
+    # Apply diversity: prefer different books
+    selected_verses = []
+    seen_books = set()
+    
+    # First pass: one verse per book (up to n)
+    for verse in all_verses:
+        if len(selected_verses) >= n:
+            break
+        if verse.book_name not in seen_books:
+            selected_verses.append(verse)
+            seen_books.add(verse.book_name)
+    
+    # Second pass: fill remaining slots with highest scores (can repeat books)
+    if len(selected_verses) < n:
+        for verse in all_verses:
+            if len(selected_verses) >= n:
+                break
+            if verse not in selected_verses:
+                selected_verses.append(verse)
+    
+    return selected_verses[:n]
 
 
 def clean_llm_output(text: str) -> str:
@@ -233,7 +265,7 @@ def clean_llm_output(text: str) -> str:
 
 
 @traceable(run_type="llm", name="generate_explanation")
-async def generate_explanation(issue: str, verses: list[Verse]) -> str:
+async def generate_explanation(issue: str, verses: list[Verse], tradition: str = "christian") -> str:
     """Generate empathetic explanation using LLM"""
     
     # Crisis detection
@@ -250,31 +282,53 @@ async def generate_explanation(issue: str, verses: list[Verse]) -> str:
             "Your life has immeasurable value. Please don't face this alone—trained counselors are ready to help right now."
         )
     
-    # Build prompt
+    # Build prompt with verse list
     verses_text = "\n\n".join([
         f"**{v.ref}** (World English Bible)\n\"{v.text[:300]}...\""
         for v in verses
     ])
     
-    system_prompt = """You are a compassionate, non-denominational Christian guide. Write 2-4 paragraphs of comfort and encouragement using Scripture.
+    # Create explicit verse reference list
+    verse_refs = ", ".join([v.ref for v in verses])
+    
+    # Adjust prompt based on tradition
+    if tradition == "jewish":
+        system_prompt = """You are a compassionate Jewish guide. Write 2-4 paragraphs of comfort and encouragement using ONLY the Torah/Tanakh verses provided.
 
-Guidelines:
+CRITICAL RULES:
+- ONLY reference the specific verses provided below - DO NOT mention any other verses
+- Use **bold** for the exact verse references given (e.g., **Psalm 55:22**)
 - Start immediately with empathy and understanding
-- Weave in the Bible verses naturally (use **bold** for verse references)
+- Focus on hope, comfort, and Hashem's love
+- Use warm, personal "you" language
+- Reference Jewish concepts naturally (Torah, mitzvot, tikkun olam)
+- Avoid: Christian terminology, New Testament, made-up citations
+- Do NOT say "I'm thinking of you", "I'll be praying for you"
+
+Just write the encouragement directly using ONLY the provided verses."""
+    else:  # christian
+        system_prompt = """You are a compassionate, non-denominational Christian guide. Write 2-4 paragraphs of comfort and encouragement using ONLY the Bible verses provided.
+
+CRITICAL RULES:
+- ONLY reference the specific verses provided below - DO NOT mention any other verses
+- Use **bold** for the exact verse references given (e.g., **Psalm 23:1**)
+- Start immediately with empathy and understanding
 - Focus on hope, comfort, and God's love
 - Use warm, personal "you" language
-- Avoid: theological jargon, personal sign-offs, meta-commentary
-- Do NOT say things like "I'm thinking of you", "I'll be praying for you", or similar personal closings
+- Avoid: theological jargon, made-up citations, personal sign-offs
+- Do NOT say "I'm thinking of you", "I'll be praying for you"
 
-Just write the encouragement directly."""
+Just write the encouragement directly using ONLY the provided verses."""
 
     user_prompt = f"""Person's concern: "{issue}"
 
-Relevant Scripture:
+The ONLY verses you may reference are: {verse_refs}
+
+Here are the verses:
 
 {verses_text}
 
-Write your response (2-4 paragraphs)."""
+Write your response (2-4 paragraphs) using ONLY these verses."""
 
     # Call LLM
     try:
@@ -298,7 +352,41 @@ Write your response (2-4 paragraphs)."""
         return explanation
             
     except Exception as e:
-        print(f"Error calling LLM: {e}")
+        error_str = str(e)
+        print(f"Error calling LLM: {e}", flush=True)
+        
+        # Check if it's a moderation false positive (happens with emotional OT verses)
+        if "403" in error_str and ("moderation" in error_str.lower() or "flagged" in error_str.lower()):
+            print("⚠️  Moderation false positive detected, using simpler prompt...", flush=True)
+            
+            # Retry with a simpler, less detailed prompt
+            try:
+                simple_prompt = f"""Write 2-3 paragraphs offering comfort and hope for someone who said: "{issue}"
+                
+Use these verses for guidance: {verse_refs}
+
+Be warm and empathetic."""
+                
+                completion = await openai_client.chat.completions.create(
+                    extra_headers={
+                        "HTTP-Referer": "https://solace.app",
+                        "X-Title": "Solace"
+                    },
+                    model=LLM_MODEL,
+                    messages=[
+                        {"role": "user", "content": simple_prompt}
+                    ],
+                    temperature=LLM_TEMPERATURE,
+                    max_tokens=600
+                )
+                
+                explanation = completion.choices[0].message.content.strip()
+                explanation = clean_llm_output(explanation)
+                return explanation
+            except Exception as retry_error:
+                print(f"Retry also failed: {retry_error}", flush=True)
+        
+        # Fallback for any error
         verse_refs = ", ".join([v.ref for v in verses])
         return f"These verses ({verse_refs}) offer comfort for what you're experiencing. Take time to read and reflect on them—they contain timeless wisdom for your situation."
 
@@ -325,8 +413,15 @@ async def recommend_verses(request: RecommendRequest):
     if not index:
         raise HTTPException(status_code=503, detail="Service not ready")
     
+    # Determine testament filter based on tradition
+    testament_filter = None
+    if request.tradition == "jewish":
+        testament_filter = ["OT"]  # Only Old Testament
+    elif request.tradition == "christian":
+        testament_filter = ["OT", "NT"]  # Both testaments
+    
     # Step 1: Search Pinecone (it handles embedding automatically)
-    matches = await search_pinecone(index, request.issue, RETRIEVAL_K)
+    matches = await search_pinecone(index, request.issue, RETRIEVAL_K, testament_filter)
     
     if not matches:
         raise HTTPException(status_code=404, detail="No verses found")
@@ -335,7 +430,7 @@ async def recommend_verses(request: RecommendRequest):
     verses = format_results(matches, RETRIEVAL_N)
     
     # Step 3: Generate explanation with LLM
-    explanation = await generate_explanation(request.issue, verses)
+    explanation = await generate_explanation(request.issue, verses, request.tradition)
     
     return RecommendResponse(
         verses=verses,
