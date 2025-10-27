@@ -21,6 +21,15 @@
     @apply shadow-md;
   }
   
+  /* Markdown formatting in explanations */
+  strong {
+    @apply font-semibold text-deepBlue;
+  }
+  
+  em {
+    @apply italic;
+  }
+  
   .btn-primary {
     @apply bg-deepBlue text-pureWhite px-8 py-3 rounded-lg font-medium 
            hover:bg-opacity-90 active:scale-95 

@@ -204,13 +204,27 @@ def clean_llm_output(text: str) -> str:
         r'^Of course\.\s*',
         r'^Sure\.\s*',
         r'^Certainly\.\s*',
-        r'^Here is (?:a|the) response.*?:\s*',
-        r'^Here\'s (?:a|the) response.*?:\s*',
-        r'^(?:Here is|Here\'s) (?:a|an) .*? word response.*?:\s*',
+        r'^Here is (?:a|the) response.*?[:\.]?\s*\n*',
+        r'^Here\'s (?:a|the) response.*?[:\.]?\s*\n*',
+        r'^(?:Here is|Here\'s) (?:a|an) .*?[:\.]?\s*\n*',
+        r'^Based on (?:the|your).*?[:\.]?\s*\n*',
     ]
     
     for ack in acknowledgments:
-        text = re.sub(ack, '', text, flags=re.IGNORECASE)
+        text = re.sub(ack, '', text, flags=re.IGNORECASE | re.MULTILINE)
+    
+    # Remove personal closings at the end
+    personal_closings = [
+        r'\s*I\'ll be (?:thinking of|praying for) you\.?\s*$',
+        r'\s*I\'m thinking of you\.?\s*$',
+        r'\s*(?:Thinking|Praying) of you\.?\s*$',
+        r'\s*You\'re in my (?:thoughts|prayers)\.?\s*$',
+        r'\s*Blessings to you\.?\s*$',
+        r'\s*May (?:God|the Lord) bless you\.?\s*$',
+    ]
+    
+    for closing in personal_closings:
+        text = re.sub(closing, '', text, flags=re.IGNORECASE)
     
     # Remove word count annotations at the end
     text = re.sub(r'\n*\*?\(?\*?Word Count:?\s*\d+\*?\)?\*?\s*$', '', text, flags=re.IGNORECASE)
@@ -242,24 +256,25 @@ async def generate_explanation(issue: str, verses: list[Verse]) -> str:
         for v in verses
     ])
     
-    system_prompt = """You are a compassionate, non-denominational Christian guide helping people find comfort and encouragement through Scripture. Your responses should be:
+    system_prompt = """You are a compassionate, non-denominational Christian guide. Write 2-4 paragraphs of comfort and encouragement using Scripture.
 
-- Warm, empathetic, and personal (use "you" language)
-- Non-judgmental and supportive
-- Focused on hope, comfort, and God's love
-- Concise but meaningful (about a paragraph or two)
-- Cite the verse references naturally in your response
-- Avoid theological jargon or denominational teachings
+Guidelines:
+- Start immediately with empathy and understanding
+- Weave in the Bible verses naturally (use **bold** for verse references)
+- Focus on hope, comfort, and God's love
+- Use warm, personal "you" language
+- Avoid: theological jargon, personal sign-offs, meta-commentary
+- Do NOT say things like "I'm thinking of you", "I'll be praying for you", or similar personal closings
 
-Your goal is to help the person feel seen, understood, and encouraged by connecting their concern to the timeless wisdom of Scripture."""
+Just write the encouragement directly."""
 
-    user_prompt = f"""Someone shared: "{issue}"
+    user_prompt = f"""Person's concern: "{issue}"
 
-Relevant passages:
+Relevant Scripture:
 
 {verses_text}
 
-Respond directly with empathy and encouragement, naturally weaving in these verses. Keep it concise but heartfelt."""
+Write your response (2-4 paragraphs)."""
 
     # Call LLM
     try:
@@ -274,7 +289,7 @@ Respond directly with empathy and encouragement, naturally weaving in these vers
                 {"role": "user", "content": user_prompt}
             ],
             temperature=LLM_TEMPERATURE,
-            max_tokens=300
+            max_tokens=600
         )
         
         explanation = completion.choices[0].message.content.strip()
@@ -301,6 +316,9 @@ async def recommend_verses(request: RecommendRequest):
     # Validate input
     if not request.issue or not request.issue.strip():
         raise HTTPException(status_code=400, detail="Issue cannot be empty")
+    
+    if len(request.issue) > 500:
+        raise HTTPException(status_code=400, detail="Input too long. Please keep your message under 500 characters.")
     
     index = app_state.get("pinecone_index")
     

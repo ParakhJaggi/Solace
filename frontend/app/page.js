@@ -3,6 +3,20 @@
 import { useState } from 'react'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL
+const MAX_CHARS = 500  // ~125 tokens
+
+// Simple markdown-to-HTML converter for bold and italic
+function parseMarkdown(text) {
+  if (!text) return text
+  
+  // Bold: **text** → <strong>text</strong>
+  let parsed = text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+  
+  // Italic: *text* → <em>text</em> (single asterisks not already part of bold)
+  parsed = parsed.replace(/\*([^*]+)\*/g, '<em>$1</em>')
+  
+  return parsed
+}
 
 export default function Home() {
   const [concern, setConcern] = useState('')
@@ -97,9 +111,25 @@ export default function Home() {
               }}
               placeholder="Share your heart... (e.g., 'I'm anxious about work' or 'I feel alone and discouraged')"
               rows={5}
+              maxLength={MAX_CHARS}
               className="input-primary"
               disabled={loading}
             />
+            
+            <div className="flex justify-between items-center mt-2">
+              <span className={`text-sm ${
+                concern.length > MAX_CHARS * 0.9 
+                  ? 'text-red-600 font-medium' 
+                  : 'text-gentleGray'
+              }`}>
+                {concern.length} / {MAX_CHARS} characters
+              </span>
+              {concern.length > MAX_CHARS * 0.8 && (
+                <span className="text-xs text-gentleGray">
+                  {MAX_CHARS - concern.length} remaining
+                </span>
+              )}
+            </div>
             
             <div className="flex gap-3 mt-4">
               <button
@@ -157,9 +187,10 @@ export default function Home() {
           <div id="results" className="space-y-6 animate-fade-in">
             {/* Explanation */}
             <div className="bg-warmBeige rounded-xl p-6 md:p-8 border border-warmBeige">
-              <p className="text-deepBlue leading-relaxed text-lg whitespace-pre-wrap">
-                {result.explanation}
-              </p>
+              <div 
+                className="text-deepBlue leading-relaxed text-lg whitespace-pre-wrap"
+                dangerouslySetInnerHTML={{ __html: parseMarkdown(result.explanation) }}
+              />
             </div>
 
             {/* Verses */}
