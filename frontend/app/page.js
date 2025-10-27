@@ -1,9 +1,16 @@
+/**
+ * Solace - Find comfort in the texts you love
+ * 
+ * Main application page
+ * Supports: Bible (Christian/Jewish) and Harry Potter
+ */
+
 'use client'
 
 import { useState } from 'react'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL
-const MAX_CHARS = 500  // ~125 tokens
+const MAX_CHARS = 500
 
 // Simple markdown-to-HTML converter for bold and italic
 function parseMarkdown(text) {

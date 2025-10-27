@@ -1,6 +1,10 @@
 """
-Bible Verse Companion - FastAPI Backend (Pinecone Version)
-Ultra-lightweight: ~200MB memory (no local embeddings!)
+Solace - FastAPI Backend
+
+Find comfort in the texts you love.
+Supports: Bible (Christian/Jewish) and Harry Potter
+
+Ultra-lightweight: ~200MB memory (serverless embeddings via Pinecone)
 """
 
 import os
@@ -12,7 +16,7 @@ load_dotenv()
 # LangSmith setup (optional)
 os.environ["LANGCHAIN_TRACING_V2"] = "true" if os.getenv("LANGCHAIN_API_KEY") else "false"
 os.environ["LANGCHAIN_API_KEY"] = os.getenv("LANGCHAIN_API_KEY", "")
-os.environ["LANGCHAIN_PROJECT"] = "bible-verse-companion"
+os.environ["LANGCHAIN_PROJECT"] = "solace"
 
 from langsmith import traceable
 from pinecone import Pinecone

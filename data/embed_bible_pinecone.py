@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
 """
-Upload Bible verses to Pinecone with serverless embeddings.
-Pinecone will handle the embedding using llama-text-embed-v2.
+Solace - Bible to Pinecone Embedder
+
+Uploads Bible verses (World English Bible) to Pinecone vector database.
+Uses Pinecone's integrated embedding with nvidia/llama-text-embed-v2.
+
+Chunks: 3 consecutive verses
+Metadata: testament (OT/NT), book, chapter, reference
 """
 
 import xml.etree.ElementTree as ET

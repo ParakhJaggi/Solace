@@ -1,6 +1,12 @@
 """
-Embed Harry Potter Books into Pinecone
-Chunks consecutive lines for better context preservation
+Solace - Harry Potter to Pinecone Embedder
+
+Uploads Harry Potter passages to Pinecone vector database.
+Uses Pinecone's integrated embedding with nvidia/llama-text-embed-v2.
+
+Chunks: 10 consecutive lines (preserves narrative context)
+Metadata: testament (HP), book, chapter, reference
+Source: gastonstat/harry-potter-data CSV
 """
 
 import csv
