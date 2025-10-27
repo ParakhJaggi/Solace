@@ -1,5 +1,0 @@
-Model: Qwen/Qwen3-Embedding-0.6B
-Query Instruction: Represent the emotional or spiritual concern described by the user to retrieve comforting Bible passages:
-Collection Name: bible_verses
-Total Chunks: 10771
-Embedding Dimension: 1024
