@@ -34,10 +34,10 @@ from pydantic import BaseModel
 from contextlib import asynccontextmanager
 
 # Configuration (hardcoded - no need for env vars)
-CHROMA_DIR = "../data/output_bible_db_qwen"
+CHROMA_DIR = os.getenv("CHROMA_DIR", "../data/output_bible_db_qwen")
 EMBED_MODEL = "Qwen/Qwen3-Embedding-0.6B"
 RERANK_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
-USE_RERANKER = True
+USE_RERANKER = False  # Disabled for low-memory deployment
 QUERY_INSTRUCTION = "Represent the emotional or spiritual concern described by the user to retrieve comforting Bible passages:"
 LLM_MODEL = "deepseek/deepseek-chat-v3.1:free"
 LLM_TEMPERATURE = 0.7
@@ -66,7 +66,9 @@ app_state = {}
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Load embedding function and vector store at startup"""
-    print("🚀 Starting up...")
+    import sys
+    print("🚀 Starting up...", flush=True)
+    sys.stdout.flush()
     
     # Check ChromaDB path exists
     print(f"📁 Loading ChromaDB from: {CHROMA_DIR}")
@@ -75,14 +77,18 @@ async def lifespan(app: FastAPI):
         raise RuntimeError(f"ChromaDB not found at {CHROMA_DIR}")
     
     # Load embedding model (LangChain wrapper)
-    print(f"🤖 Loading embedding model: {EMBED_MODEL}")
+    print(f"🤖 Loading embedding model: {EMBED_MODEL}", flush=True)
+    import sys
+    sys.stdout.flush()
+    
     embeddings = HuggingFaceEmbeddings(
         model_name=EMBED_MODEL,
         model_kwargs={'device': 'cpu', 'trust_remote_code': True},
         encode_kwargs={'normalize_embeddings': True}
     )
     app_state["embeddings"] = embeddings
-    print(f"   ✓ Embeddings loaded")
+    print(f"   ✓ Embeddings loaded", flush=True)
+    sys.stdout.flush()
     
     # Load Chroma vector store
     print(f"📚 Loading Chroma vector store...")
@@ -363,6 +369,6 @@ async def root():
 
 if __name__ == "__main__":
     import uvicorn
-    port = 8080
+    port = int(os.getenv("PORT", "8080"))
     uvicorn.run(app, host="0.0.0.0", port=port)
 
