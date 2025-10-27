@@ -87,7 +87,7 @@ export default function Home() {
               Solace
             </h1>
             <p className="text-gentleGray text-sm md:text-base">
-              Find comfort in Scripture
+              Find comfort in the texts you love
             </p>
           </div>
         </div>
@@ -134,6 +134,15 @@ export default function Home() {
               onChange={(e) => {
                 setConcern(e.target.value)
                 setError(null)
+              }}
+              onKeyDown={(e) => {
+                // Submit on Enter (without Shift), allow Shift+Enter for new lines
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault()
+                  if (concern.trim().length > 0 && !loading) {
+                    handleSubmit(e)
+                  }
+                }
               }}
               placeholder="Share your heart... (e.g., 'I'm anxious about work' or 'I feel alone and discouraged')"
               rows={5}
@@ -222,7 +231,7 @@ export default function Home() {
             {/* Verses */}
             <div>
               <h2 className="text-xl font-serif text-deepBlue mb-4">
-                Scripture References
+                References
               </h2>
               <div className="space-y-4">
                 {result.verses.map((verse, index) => (
