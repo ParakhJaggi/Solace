@@ -32,6 +32,7 @@ LLM_TEMPERATURE = 0.7
 # Retrieval settings
 RETRIEVAL_K = 50  # Get top 50 candidates from Pinecone for better quality
 RETRIEVAL_N = 3   # Return top 3 to user
+USE_RERANKER = True  # Use Pinecone's hosted reranker 
 
 # Initialize clients
 openai_client = AsyncOpenAI(
@@ -127,7 +128,8 @@ async def health_check():
     return {
         "ok": True,
         "db_verses": db_count,
-        "framework": "Pinecone + DeepSeek"
+        "framework": "Pinecone + DeepSeek",
+        "reranker": "pinecone-rerank-v0" if USE_RERANKER else "none"
     }
 
 
@@ -161,6 +163,64 @@ async def search_pinecone(index, query: str, k: int, testament_filter: list = No
         matches = results.matches or []
     
     return matches
+
+
+@traceable(run_type="tool", name="rerank_results")
+def rerank_results(query: str, matches, top_n: int):
+    """Rerank results using Pinecone's hosted reranker"""
+    pc = app_state["pinecone_client"]
+    
+    # Convert matches to documents for reranking
+    documents = []
+    for match in matches:
+        fields = getattr(match, 'fields', {})
+        if hasattr(fields, '__dict__'):
+            fields_dict = fields.__dict__
+        elif isinstance(fields, dict):
+            fields_dict = fields
+        else:
+            fields_dict = {}
+        
+        # Extract id from match
+        match_id = getattr(match, '_id', getattr(match, 'id', 'unknown'))
+        
+        documents.append({
+            "id": match_id,
+            "text": fields_dict.get('text', ''),
+            "reference": fields_dict.get('reference', ''),
+            "book_name": fields_dict.get('book_name', ''),
+            "translation": fields_dict.get('translation', 'WEB')
+        })
+    
+    # Call Pinecone's hosted reranker
+    reranked = pc.inference.rerank(
+        model="pinecone-rerank-v0",
+        query=query,
+        documents=documents,
+        top_n=top_n,
+        rank_fields=["text"],
+        return_documents=True,
+        parameters={"truncate": "END"}
+    )
+    
+    # Convert reranked results back to match-like objects
+    reranked_matches = []
+    for item in reranked.data:
+        # Create a simple object with the reranked data
+        class RankedMatch:
+            def __init__(self, doc, score):
+                self._id = doc.get('id', 'unknown')
+                self._score = score
+                self.fields = {
+                    'text': doc.get('text', ''),
+                    'reference': doc.get('reference', ''),
+                    'book_name': doc.get('book_name', ''),
+                    'translation': doc.get('translation', 'WEB')
+                }
+        
+        reranked_matches.append(RankedMatch(item.document, item.score))
+    
+    return reranked_matches
 
 
 @traceable(run_type="parser", name="format_results")
@@ -426,8 +486,18 @@ async def recommend_verses(request: RecommendRequest):
     if not matches:
         raise HTTPException(status_code=404, detail="No verses found")
     
-    # Step 2: Format top N results
-    verses = format_results(matches, RETRIEVAL_N)
+    # Step 2: Rerank with Pinecone's hosted reranker (graceful fallback if limit hit)
+    if USE_RERANKER:
+        try:
+            matches = rerank_results(request.issue, matches, RETRIEVAL_N)
+            verses = format_results(matches, RETRIEVAL_N, ensure_diversity=False)  # Already top N from reranker
+            print("✓ Reranked results", flush=True)
+        except Exception as e:
+            print(f"⚠️  Reranker failed ({e}), falling back to diversity filter", flush=True)
+            verses = format_results(matches, RETRIEVAL_N, ensure_diversity=True)
+    else:
+        # Just use diversity filtering
+        verses = format_results(matches, RETRIEVAL_N, ensure_diversity=True)
     
     # Step 3: Generate explanation with LLM
     explanation = await generate_explanation(request.issue, verses, request.tradition)
