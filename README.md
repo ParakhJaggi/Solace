@@ -1,244 +1,485 @@
-# 📖 Bible Verse Companion (MVP)
+# 🕊️ Solace
 
-A semantic search application that helps users find comforting Bible verses based on their emotional or spiritual concerns. Built with state-of-the-art AI embeddings using [Qwen3-Embedding-8B](https://huggingface.co/Qwen/Qwen3-Embedding-8B).
+**Find comfort in the texts you love.**
+
+A RAG (Retrieval Augmented Generation) application that helps users find comforting passages when they're going through difficult times. Search across religious texts (Bible) or beloved stories (Harry Potter) and receive personalized, empathetic explanations.
 
 ## 🎯 Core Value Proposition
 
-**User types what they're going through → gets 1-3 highly relevant verses + a short, empathetic explanation.**
+**User types what they're going through → gets 3 highly relevant passages + 2-4 paragraphs of empathetic explanation.**
 
-### User Stories
+### Example Use Cases
 
-1. **"I'm anxious about work."** → Relevant verses + 120–180-word encouragement
-2. **"I feel guilty about a mistake."** → Verses on confession/forgiveness + why they help
-3. **"I'm feeling lonely."** → Comforting verses + empathetic context
+1. **"I'm anxious about work."** → Relevant passages + warm encouragement
+2. **"I feel like an outsider."** → Passages about belonging + comforting context
+3. **"I'm grieving a loss."** → Passages about hope and healing + empathetic support
 
 ## 🌟 Features
 
-- ✅ Semantic search using Qwen3-Embedding-8B (state-of-the-art multilingual model)
-- ✅ Vector database with ChromaDB for fast similarity search
-- ✅ World English Bible (complete Bible text)
-- ✅ Persistent database for production deployment
-- ✅ Mobile-first design (planned)
-- ✅ Faith-based encouragement for real-world concerns
+### Multi-Source Retrieval
+- ✅ **Christian Bible** (Old & New Testament) - 31,000+ verses
+- ✅ **Jewish Texts** (Torah/Tanakh only) - Old Testament filtering
+- ✅ **Harry Potter** 🪄 - 7 books, ~6,000+ passages
+
+### Intelligent Search Pipeline
+- ✅ **Semantic search** using Pinecone's `nvidia/llama-text-embed-v2` (1024-dim embeddings)
+- ✅ **Two-stage retrieval**: Vector search (k=50) → Reranking (n=3) with `pinecone-rerank-v0`
+- ✅ **Book diversity filter**: Prevents all results from same book (e.g., all Psalms)
+- ✅ **Metadata filtering**: Testament-based filtering (OT, NT, HP)
+
+### AI-Powered Synthesis
+- ✅ **LLM explanations** using DeepSeek V3.1 (2-4 paragraphs, ~200-300 words)
+- ✅ **Tradition-aware prompts**: Different tone for Jewish/Christian/Harry Potter contexts
+- ✅ **Crisis detection**: Detects self-harm language and provides hotline resources
+- ✅ **Moderation handling**: Graceful fallback for false-positive content flags
+
+### Production-Ready
+- ✅ **FastAPI backend** with LangSmith tracing
+- ✅ **Next.js frontend** with static site generation
+- ✅ **Character limits** (500 chars) with validation
+- ✅ **Error handling**: Graceful fallbacks for rate limits, moderation, etc.
+- ✅ **Enter key submission** for better UX
+- ✅ **Deployed** on Render (frontend + backend)
 
 ## 🚀 Quick Start
 
-### Installation
+### Prerequisites
+- Python 3.9+
+- Node.js 18+
+- Pinecone account (free tier)
+- OpenRouter account (free tier)
 
-```bash
-# Install dependencies
-pip install -r requirements.txt
-```
-
-### Create the Vector Database
+### 1. Set Up the Vector Database
 
 ```bash
 cd data
-python embed_bible_qwen.py
+
+# Download Harry Potter CSV
+curl -o books/harry_potter_books.csv \
+  "https://raw.githubusercontent.com/gastonstat/harry-potter-data/refs/heads/main/csv-data-file/harry_potter_books.csv"
+
+# Create .env file
+echo "PINECONE_API_KEY=your_key_here" > .env
+
+# Install dependencies
+pip install -r requirements_pinecone.txt
+
+# Embed Bible verses
+python embed_bible_pinecone.py
+
+# Embed Harry Potter passages
+python embed_harry_potter_pinecone.py
 ```
 
-This will:
-- Parse the Bible XML file (engwebp_vpl.xml)
-- Create embeddings using Qwen3-Embedding-8B
-- Store in ChromaDB for fast retrieval
-- Takes ~10-30 minutes on CPU (3-10 minutes on GPU)
+Expected output:
+- **Bible**: ~31,000 verse chunks → Pinecone (testament: OT/NT)
+- **Harry Potter**: ~6,000 passages → Pinecone (testament: HP)
+- Takes ~30-60 minutes with rate limiting
 
-### Try It Out
+### 2. Run the Backend
 
 ```bash
-python example_query.py
+cd backend
+
+# Create .env file
+cat > .env << EOF
+PINECONE_API_KEY=your_pinecone_key
+OPENROUTER_API_KEY=your_openrouter_key
+LANGCHAIN_API_KEY=your_langsmith_key  # Optional for tracing
+EOF
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Run the server
+python main.py
 ```
 
-This runs example queries and starts an interactive mode where you can type your concerns.
+Backend runs on `http://localhost:8080`
 
-## 📚 Documentation
+### 3. Run the Frontend
 
-- **[SETUP.md](SETUP.md)** - Detailed setup instructions, troubleshooting, and production usage
-- **[data/embed_bible_qwen.py](data/embed_bible_qwen.py)** - Database creation script
-- **[data/example_query.py](data/example_query.py)** - Example query implementation
+```bash
+cd frontend
+
+# Install dependencies
+npm install
+
+# Create .env.local file
+echo "NEXT_PUBLIC_API_URL=http://localhost:8080" > .env.local
+
+# Run dev server
+npm run dev
+```
+
+Frontend runs on `http://localhost:3000`
 
 ## 🏗️ Architecture
 
+### Data Flow
+
 ```
-┌─────────────────┐
-│  User Input     │  "I'm anxious about work"
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────────────────────────┐
-│  Qwen3-Embedding-8B                 │  Convert query to vector
-│  + Query Instruction                │
-└────────┬────────────────────────────┘
-         │
-         ▼
-┌─────────────────────────────────────┐
-│  ChromaDB Vector Search             │  Find similar verses
-│  (Cosine Similarity)                │
-└────────┬────────────────────────────┘
-         │
-         ▼
-┌─────────────────────────────────────┐
-│  Top 1-3 Most Relevant Verses       │  Philippians 4:6-8, etc.
-└────────┬────────────────────────────┘
-         │
-         ▼
-┌─────────────────────────────────────┐
-│  LLM-Generated Explanation          │  120-180 words (Future)
-│  (Empathetic Context)               │
-└─────────────────────────────────────┘
+User Input: "I'm anxious about work"
+    │
+    ▼
+┌─────────────────────────────────────────┐
+│ FastAPI Backend                         │
+│                                         │
+│ 1. Input validation (500 char limit)   │
+│ 2. Testament filter selection           │
+│    • jewish → ["OT"]                    │
+│    • christian → ["OT", "NT"]           │
+│    • harry_potter → ["HP"]              │
+└───────────────┬─────────────────────────┘
+                │
+                ▼
+┌─────────────────────────────────────────┐
+│ Pinecone Search (Integrated Embedding)  │
+│                                         │
+│ • Model: nvidia/llama-text-embed-v2 (1024-dim) │
+│ • Query embedded automatically          │
+│ • Metadata filter applied               │
+│ • Returns top k=50 candidates           │
+└───────────────┬─────────────────────────┘
+                │
+                ▼
+┌─────────────────────────────────────────┐
+│ Pinecone Reranker (pinecone-rerank-v0)  │
+│                                         │
+│ • Re-scores 50 candidates               │
+│ • Returns top n=3 most relevant         │
+│ • Graceful fallback if quota exceeded   │
+└───────────────┬─────────────────────────┘
+                │
+                ▼
+┌─────────────────────────────────────────┐
+│ Book Diversity Filter (Optional)        │
+│                                         │
+│ • If reranker fails, ensures variety    │
+│ • Picks one passage per book            │
+│ • Prevents "all Psalms" results         │
+└───────────────┬─────────────────────────┘
+                │
+                ▼
+┌─────────────────────────────────────────┐
+│ LLM Synthesis (DeepSeek V3.1 via        │
+│ OpenRouter)                             │
+│                                         │
+│ • Tradition-aware prompts:              │
+│   - Jewish: Torah/Tanakh language       │
+│   - Christian: Non-denominational       │
+│   - Harry Potter: Story wisdom          │
+│ • Crisis detection + hotlines           │
+│ • Moderation retry logic                │
+│ • 2-4 paragraphs of comfort             │
+└───────────────┬─────────────────────────┘
+                │
+                ▼
+┌─────────────────────────────────────────┐
+│ Response                                │
+│                                         │
+│ {                                       │
+│   "verses": [                           │
+│     {                                   │
+│       "ref": "Philippians 4:6-7",       │
+│       "text": "...",                    │
+│       "translation": "WEB",             │
+│       "score": 0.89                     │
+│     }                                   │
+│   ],                                    │
+│   "explanation": "..."                  │
+│ }                                       │
+└─────────────────────────────────────────┘
 ```
 
 ## 🤖 Technology Stack
 
-- **Embedding Model:** [Qwen3-Embedding-8B](https://huggingface.co/Qwen/Qwen3-Embedding-8B)
-  - 8B parameters, 4096 dimensions
-  - #1 on MTEB multilingual leaderboard
-  - 100+ language support
-  
-- **Vector Database:** ChromaDB
-  - Fast similarity search
-  - Persistent storage
-  - Easy production deployment
+### Backend
+- **Framework**: FastAPI
+- **Embeddings**: Pinecone Inference API (`nvidia/llama-text-embed-v2`, 1024 dimensions)
+- **Vector Database**: Pinecone (serverless)
+- **Reranker**: Pinecone Rerank (`pinecone-rerank-v0`)
+- **LLM**: DeepSeek V3.1 via OpenRouter
+- **Tracing**: LangSmith (optional)
+- **Deployment**: Render / Oracle Cloud Free Tier
 
-- **Bible Source:** World English Bible (Public Domain)
-  - Complete Old and New Testament
-  - Modern English translation
+### Frontend
+- **Framework**: Next.js 14 (React)
+- **Styling**: Tailwind CSS
+- **Build**: Static Site Generation (SSG)
+- **Deployment**: Render Static Site
+
+### Data
+- **Bible**: World English Bible (WEB) - Public Domain XML
+- **Harry Potter**: [gastonstat/harry-potter-data](https://github.com/gastonstat/harry-potter-data) CSV
+- **Chunking**: 3 verses (Bible) / 10 lines (Harry Potter)
 
 ## 📊 Project Structure
 
 ```
 ask-book/
 ├── data/
-│   ├── engwebp_vpl.xml              # Bible XML source (31K+ verses)
-│   ├── embed_bible_qwen.py          # Database creation script ⭐
-│   ├── example_query.py             # Query example ⭐
-│   └── output_bible_db_qwen/        # Generated vector DB (after setup)
-├── requirements.txt                  # Python dependencies
-├── README.md                        # This file
-└── SETUP.md                         # Detailed setup guide
+│   ├── books/
+│   │   └── harry_potter_books.csv      # HP source data (95K lines)
+│   ├── engwebp_vpl.xml                 # Bible XML source (31K verses)
+│   ├── embed_bible_pinecone.py         # Bible → Pinecone embedder ⭐
+│   ├── embed_harry_potter_pinecone.py  # Harry Potter → Pinecone embedder ⭐
+│   ├── requirements_pinecone.txt       # Embedding dependencies
+│   └── .env                            # PINECONE_API_KEY
+│
+├── backend/
+│   ├── main.py                         # FastAPI app ⭐
+│   ├── requirements.txt                # Backend dependencies
+│   └── .env                            # API keys
+│
+├── frontend/
+│   ├── app/
+│   │   ├── page.js                     # Main app page ⭐
+│   │   ├── layout.js                   # Root layout
+│   │   └── globals.css                 # Global styles
+│   ├── tailwind.config.js              # Tailwind config
+│   ├── next.config.js                  # Next.js config (SSG)
+│   ├── package.json                    # Frontend dependencies
+│   └── .env.local                      # NEXT_PUBLIC_API_URL
+│
+└── README.md                           # This file
 ```
-
-## 🎯 Roadmap
-
-### ✅ Phase 1: Core Vector Search (Current)
-- [x] XML parsing
-- [x] Qwen3-Embedding-8B integration
-- [x] ChromaDB vector storage
-- [x] Basic query interface
-
-### 🚧 Phase 2: Backend API (Next)
-- [ ] FastAPI REST API
-- [ ] Query endpoint with verse retrieval
-- [ ] LLM integration for explanations (120-180 words)
-- [ ] Rate limiting and caching
-
-### 📱 Phase 3: Mobile-First Frontend
-- [ ] React/React Native UI
-- [ ] Clean, empathetic design
-- [ ] Input field + verse display
-- [ ] Save favorite verses
-
-### 🚀 Phase 4: Deployment
-- [ ] Docker containerization
-- [ ] Cloud deployment (AWS/GCP)
-- [ ] CDN for static assets
-- [ ] Monitoring and analytics
-
-## 🔍 How It Works
-
-### The Query Instruction
-
-The key to good semantic search is the **query instruction**:
-
-```
-Represent the emotional or spiritual concern described by the user 
-to retrieve comforting Bible passages:
-```
-
-This instruction tells the embedding model to:
-1. Interpret user input as emotional/spiritual concerns
-2. Match with Bible verses that provide comfort
-3. Prioritize relevance for encouragement
-
-### Example Queries
-
-| User Input | Matches Verses About |
-|------------|---------------------|
-| "I'm anxious" | Peace, trust in God, casting worries |
-| "I feel guilty" | Forgiveness, confession, God's mercy |
-| "I'm lonely" | God's presence, community, comfort |
-| "I need courage" | Strength, faith, overcoming fear |
-
-## 🛠️ Production Usage
-
-### Loading the Database
-
-```python
-import chromadb
-from sentence_transformers import SentenceTransformer
-
-# Load database
-client = chromadb.PersistentClient(path="./data/output_bible_db_qwen")
-collection = client.get_collection("bible_verses")
-
-# Load model
-model = SentenceTransformer("Qwen/Qwen3-Embedding-8B", trust_remote_code=True)
-```
-
-### Querying
-
-```python
-# User concern
-query = "I'm feeling anxious"
-
-# Embed query with instruction
-instruction = "Represent the emotional or spiritual concern..."
-embedding = model.encode([f"{instruction} {query}"])
-
-# Search
-results = collection.query(query_embeddings=embedding.tolist(), n_results=3)
-
-# Access results
-for i, verse_text in enumerate(results['documents'][0]):
-    reference = results['metadatas'][0][i]['reference']
-    print(f"{reference}: {verse_text}")
-```
-
-See [SETUP.md](SETUP.md) for complete documentation.
 
 ## 📈 Performance
 
-- **Embedding creation:** 10-30 min (CPU) / 3-10 min (GPU)
-- **Query time:** <100ms per query (with model loaded)
-- **Database size:** ~500MB-1GB
-- **Memory usage:** ~8GB during embedding, ~2GB during queries
+### Latency (p95)
+- **Total request**: ~2-3 seconds
+  - Embedding (integrated): ~100ms
+  - Vector search: ~200ms
+  - Reranking: ~300ms
+  - LLM generation: ~1-2s
+  - Network overhead: ~200ms
+
+### Cost (per 1000 requests)
+- **Pinecone**: 
+  - Search: ~$0.02 (serverless, 1M vectors)
+  - Reranking: Free tier (10k/month)
+- **OpenRouter (DeepSeek V3.1)**: Free tier
+- **Total**: Effectively free on free tiers
+
+### Memory Footprint
+- **Backend**: ~200MB RAM (no local embeddings!)
+- **Frontend**: Static site (negligible)
+
+## 🔍 How It Works
+
+### Chunking Strategy
+
+**Bible (Verse-Based)**
+```python
+# Group 3 consecutive verses
+chunk = {
+    "text": "verse1 verse2 verse3",
+    "reference": "Philippians 4:6-8",
+    "testament": "NT"  # or "OT"
+}
+```
+
+**Harry Potter (Line-Based)**
+```python
+# Group 10 consecutive lines from CSV
+chunk = {
+    "text": "10 lines of narrative...",
+    "reference": "Deathly Hallows, Chapter 33",
+    "testament": "HP"
+}
+```
+
+### Tradition-Aware Prompts
+
+**Jewish**
+```
+"You are a compassionate Jewish guide. Write 2-4 paragraphs...
+- Reference Torah/Tanakh verses
+- Use Jewish concepts (mitzvot, tikkun olam)
+- Focus on Hashem's love"
+```
+
+**Christian**
+```
+"You are a compassionate, non-denominational Christian guide...
+- Reference Bible verses (OT/NT)
+- Focus on God's love and grace
+- Avoid theological jargon"
+```
+
+**Harry Potter**
+```
+"You are a compassionate guide who finds wisdom in stories...
+- Draw parallels to themes (courage, friendship, loss)
+- Reference characters and moments
+- Avoid religious language"
+```
+
+### Crisis Detection
+
+Detects keywords like "suicide", "self-harm", "want to die" and immediately returns:
+```
+"I'm deeply concerned about what you're going through. 
+Please reach out for immediate support:
+
+• National Suicide Prevention Lifeline: 988 (24/7)
+• Crisis Text Line: Text HOME to 741741
+• International Association for Suicide Prevention: [link]
+
+Your life has immeasurable value..."
+```
+
+## 🎯 API Reference
+
+### POST `/recommend`
+
+**Request**
+```json
+{
+  "issue": "I'm feeling anxious about work",
+  "tradition": "christian"  // "christian" | "jewish" | "harry_potter"
+}
+```
+
+**Response**
+```json
+{
+  "verses": [
+    {
+      "ref": "Philippians 4:6-7",
+      "text": "Don't be anxious about anything...",
+      "translation": "WEB",
+      "score": 0.89,
+      "book_name": "Philippians"
+    }
+  ],
+  "explanation": "I hear the weight in your words, the anxiety..."
+}
+```
+
+**Errors**
+- `400`: Empty issue or > 500 characters
+- `404`: No passages found
+- `503`: Service not ready
+
+### GET `/healthz`
+
+**Response**
+```json
+{
+  "ok": true,
+  "db_verses": 37000,
+  "framework": "Pinecone + DeepSeek",
+  "reranker": "pinecone-rerank-v0"
+}
+```
+
+## 🚀 Deployment
+
+### Backend (Render / Oracle Cloud)
+
+**Render (Recommended)**
+```bash
+# render.yaml (auto-detected)
+services:
+  - type: web
+    name: solace-api
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python main.py
+    envVars:
+      - key: PINECONE_API_KEY
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+```
+
+**Oracle Cloud Free Tier**
+```bash
+# SSH to instance
+ssh -i key.pem ubuntu@instance-ip
+
+# Copy backend files
+scp -r backend/ ubuntu@instance-ip:~/
+
+# Run with Docker (optional)
+docker-compose up -d
+```
+
+### Frontend (Render Static Site)
+
+```bash
+# Render auto-detects Next.js
+Build Command: npm install && npm run build
+Publish Directory: frontend/out
+
+# Environment variable
+NEXT_PUBLIC_API_URL=https://your-backend.onrender.com
+```
+
+## 🛠️ Development
+
+### Adding a New Source
+
+1. **Create embedding script** (`data/embed_YOUR_SOURCE_pinecone.py`)
+```python
+chunk = {
+    "text": "...",
+    "reference": "Book, Chapter X",
+    "testament": "YOUR_CODE",  # e.g., "LOTR"
+    "translation": "Original"
+}
+```
+
+2. **Update backend** (`backend/main.py`)
+```python
+elif request.tradition == "your_source":
+    testament_filter = ["YOUR_CODE"]
+```
+
+3. **Add prompt**
+```python
+elif tradition == "your_source":
+    system_prompt = """..."""
+```
+
+4. **Update frontend** (`frontend/app/page.js`)
+```jsx
+<option value="your_source">Your Source Name</option>
+```
 
 ## 🤝 Contributing
 
-This is an MVP project. Future contributions could include:
-- Additional Bible translations
-- Multilingual support (leveraging Qwen3's 100+ languages)
-- Alternative embedding models
-- Query result ranking improvements
-- Frontend development
+Ideas for future contributions:
+- [ ] Add more sources (Lord of the Rings, Quran, Buddhist texts)
+- [ ] Multi-turn conversation (agent mode)
+- [ ] User accounts + saved passages
+- [ ] Multilingual support
+- [ ] Voice input
+- [ ] Sharing passages on social media
 
 ## 📄 License
 
-- **Code:** MIT License (or your choice)
-- **Bible Text:** World English Bible (Public Domain)
-- **Model:** Qwen3-Embedding-8B (Apache 2.0)
+- **Code**: MIT License
+- **Bible Text**: World English Bible (Public Domain)
+- **Harry Potter Text**: Educational/transformative use, see [gastonstat/harry-potter-data](https://github.com/gastonstat/harry-potter-data)
 
 ## 🙏 Acknowledgments
 
-- [Qwen Team](https://huggingface.co/Qwen) for the excellent Qwen3-Embedding models
-- World English Bible translators
-- ChromaDB team for the vector database
-- HuggingFace for model hosting and tooling
-
-## 📧 Contact
-
-For questions or suggestions, please open an issue.
+- [Pinecone](https://www.pinecone.io/) for serverless vector database + reranker
+- [OpenRouter](https://openrouter.ai/) for LLM API access
+- [DeepSeek](https://www.deepseek.com/) for the V3.1 model
+- [World English Bible](https://ebible.org/web/) translators
+- [gastonstat](https://github.com/gastonstat) for Harry Potter dataset
+- [LangSmith](https://smith.langchain.com/) for tracing tools
 
 ---
 
-**Built with ❤️ to provide comfort and encouragement through faith.**
+**Built with ❤️ to provide comfort and encouragement through the texts you love.**
+
+*"Happiness can be found, even in the darkest of times, if one only remembers to turn on the light." — Albus Dumbledore*
+
+---
+
+Made by **[Parakh Jaggi](https://www.linkedin.com/in/parakhjaggi/)**

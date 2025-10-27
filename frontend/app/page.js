@@ -291,6 +291,9 @@ export default function Home() {
           <p className="text-xs text-gentleGray mt-2">
             Made with care and compassion
           </p>
+          <p className="text-xs text-gentleGray mt-1">
+            by <a href="https://www.linkedin.com/in/parakhjaggi/" target="_blank" rel="noopener noreferrer" className="hover:text-softGold transition-colors">Parakh Jaggi</a>
+          </p>
         </div>
       </footer>
 
