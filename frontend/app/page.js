@@ -105,7 +105,7 @@ export default function Home() {
                 htmlFor="tradition" 
                 className="block text-deepBlue font-medium mb-3 text-sm"
               >
-                Select your faith tradition
+                Select your source
               </label>
               <select
                 id="tradition"
@@ -118,6 +118,7 @@ export default function Home() {
               >
                 <option value="christian">Christian (Old & New Testament)</option>
                 <option value="jewish">Jewish (Torah & Tanakh)</option>
+                <option value="harry_potter">Harry Potter 🪄</option>
               </select>
             </div>
 
@@ -190,7 +191,7 @@ export default function Home() {
                         d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                       />
                     </svg>
-                    Seeking verses...
+                    Finding comfort...
                   </span>
                 ) : (
                   'Find Comfort'
@@ -273,7 +274,7 @@ export default function Home() {
               </svg>
             </div>
             <p className="text-gentleGray">
-              Share your heart, and we'll find verses to comfort you.
+              Share your heart, and we'll find passages to comfort you.
             </p>
           </div>
         )}
@@ -283,7 +284,9 @@ export default function Home() {
       <footer className="bg-pureWhite border-t border-warmBeige mt-16">
         <div className="max-w-4xl mx-auto px-4 py-6 text-center">
           <p className="text-sm text-gentleGray">
-            All verses from the World English Bible (WEB) translation
+            {tradition === 'harry_potter' 
+              ? 'Harry Potter series by J.K. Rowling' 
+              : 'Biblical passages from the World English Bible (WEB) translation'}
           </p>
           <p className="text-xs text-gentleGray mt-2">
             Made with care and compassion

@@ -344,7 +344,7 @@ async def generate_explanation(issue: str, verses: list[Verse], tradition: str =
     
     # Build prompt with verse list
     verses_text = "\n\n".join([
-        f"**{v.ref}** (World English Bible)\n\"{v.text[:300]}...\""
+        f"**{v.ref}**{' (' + v.translation + ')' if v.translation != 'Original' else ''}\n\"{v.text[:300]}...\""
         for v in verses
     ])
     
@@ -366,6 +366,20 @@ CRITICAL RULES:
 - Do NOT say "I'm thinking of you", "I'll be praying for you"
 
 Just write the encouragement directly using ONLY the provided verses."""
+    elif tradition == "harry_potter":
+        system_prompt = """You are a compassionate guide who finds wisdom in stories. Write 2-4 paragraphs of comfort and encouragement using ONLY the Harry Potter passages provided.
+
+CRITICAL RULES:
+- ONLY reference the specific passages provided below - DO NOT mention any other scenes
+- Use **bold** for the exact references given (e.g., **Deathly Hallows, Chapter 33**)
+- Start immediately with empathy and understanding
+- Draw parallels between their situation and the themes in the passages (courage, friendship, overcoming fear, belonging, loss, hope)
+- Reference characters, moments, and themes naturally (Harry's courage, Dumbledore's wisdom, the power of friendship)
+- Use warm, personal "you" language - connect the story's wisdom to their life
+- Avoid: religious language, made-up scenes, personal sign-offs
+- Do NOT say "I'm thinking of you", "May you find peace"
+
+Just write the encouragement directly, connecting the story's wisdom to their experience using ONLY the provided passages."""
     else:  # christian
         system_prompt = """You are a compassionate, non-denominational Christian guide. Write 2-4 paragraphs of comfort and encouragement using ONLY the Bible verses provided.
 
@@ -382,13 +396,13 @@ Just write the encouragement directly using ONLY the provided verses."""
 
     user_prompt = f"""Person's concern: "{issue}"
 
-The ONLY verses you may reference are: {verse_refs}
+The ONLY passages you may reference are: {verse_refs}
 
-Here are the verses:
+Here are the passages:
 
 {verses_text}
 
-Write your response (2-4 paragraphs) using ONLY these verses."""
+Write your response (2-4 paragraphs) using ONLY these passages."""
 
     # Call LLM
     try:
@@ -423,7 +437,7 @@ Write your response (2-4 paragraphs) using ONLY these verses."""
             try:
                 simple_prompt = f"""Write 2-3 paragraphs offering comfort and hope for someone who said: "{issue}"
                 
-Use these verses for guidance: {verse_refs}
+Use these passages for guidance: {verse_refs}
 
 Be warm and empathetic."""
                 
@@ -448,7 +462,7 @@ Be warm and empathetic."""
         
         # Fallback for any error
         verse_refs = ", ".join([v.ref for v in verses])
-        return f"These verses ({verse_refs}) offer comfort for what you're experiencing. Take time to read and reflect on them—they contain timeless wisdom for your situation."
+        return f"These passages ({verse_refs}) offer comfort for what you're experiencing. Take time to read and reflect on them—they contain timeless wisdom for your situation."
 
 
 # Main endpoint
@@ -456,8 +470,9 @@ Be warm and empathetic."""
 @traceable(run_type="chain", name="recommend_verses")
 async def recommend_verses(request: RecommendRequest):
     """
-    Get Bible verse recommendations based on user's concern
+    Get passage recommendations based on user's concern
     
+    Supports: Bible (Christian/Jewish) and Harry Potter
     Uses Pinecone for serverless vector search (no local embeddings!)
     """
     
@@ -479,6 +494,8 @@ async def recommend_verses(request: RecommendRequest):
         testament_filter = ["OT"]  # Only Old Testament
     elif request.tradition == "christian":
         testament_filter = ["OT", "NT"]  # Both testaments
+    elif request.tradition == "harry_potter":
+        testament_filter = ["HP"]  # Harry Potter books
     
     # Step 1: Search Pinecone (it handles embedding automatically)
     matches = await search_pinecone(index, request.issue, RETRIEVAL_K, testament_filter)
@@ -512,9 +529,10 @@ async def recommend_verses(request: RecommendRequest):
 async def root():
     """Root endpoint with API info"""
     return {
-        "name": "Solace - Bible Verse Companion API",
-        "version": "0.3.0",
+        "name": "Solace - Find Comfort in the Texts You Love",
+        "version": "0.4.0",
         "status": "Pinecone + DeepSeek ✅",
+        "sources": ["Bible (Christian)", "Torah/Tanakh (Jewish)", "Harry Potter"],
         "memory": "~200MB (serverless embeddings)",
         "endpoints": {
             "health": "/healthz",
