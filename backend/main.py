@@ -154,11 +154,14 @@ async def health_check():
 async def search_twitter_content(query: str, tavily_client):
     """Search Twitter for relevant comfort and encouragement posts"""
     try:
-        # Use the exact settings that work
+        # Use advanced search parameters for better tweet-specific results
         response = tavily_client.search(
             query=query,
             include_raw_content="text",
-            include_domains=["x.com"]
+            include_domains=["x.com"],
+            search_depth="advanced",
+            max_results=5,
+            include_answer=False
         )
         
         # Process results into tweet-like format
