@@ -449,6 +449,7 @@ CRITICAL RULES:
 - Reference Jewish concepts naturally (Torah, mitzvot, tikkun olam)
 - Avoid: Christian terminology, New Testament, made-up citations
 - Do NOT say "I'm thinking of you", "I'll be praying for you"
+- FORMAT: Write in 2-4 separate paragraphs with blank lines between them
 
 Just write the encouragement directly using ONLY the provided verses."""
                 elif request.tradition == "harry_potter":
@@ -464,6 +465,7 @@ CRITICAL RULES:
 - Use warm, personal "you" language - connect the story's wisdom to their life
 - Avoid: religious language, made-up scenes, personal sign-offs
 - Do NOT say "I'm thinking of you", "May you find peace"
+- FORMAT: Write in 2-4 separate paragraphs with blank lines between them
 
 Just write the encouragement directly, connecting the story's wisdom to their experience using ONLY the provided passages."""
                 else:  # christian
@@ -478,6 +480,7 @@ CRITICAL RULES:
 - Use warm, personal "you" language
 - Avoid: theological jargon, made-up citations, personal sign-offs
 - Do NOT say "I'm thinking of you", "I'll be praying for you"
+- FORMAT: Write in 2-4 separate paragraphs with blank lines between them
 
 Just write the encouragement directly using ONLY the provided verses."""
                 

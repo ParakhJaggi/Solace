@@ -149,7 +149,11 @@ export default function Home() {
             <div 
               className="prose lg:prose-lg prose-pre:p-0 prose-pre:m-0 prose-pre:bg-transparent text-deepBlue max-w-none"
               dangerouslySetInnerHTML={{ 
-                __html: explanationText.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>') 
+                __html: explanationText
+                  .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+                  .replace(/\n\n/g, '</p><p>')
+                  .replace(/^/, '<p>')
+                  .replace(/$/, '</p>')
               }}
             />
           </div>
@@ -163,7 +167,15 @@ export default function Home() {
             </h2>
             <div className="space-y-4">
               {result.verses.map((verse, index) => (
-                <div key={index} className="verse-card">
+                <div 
+                  key={index} 
+                  className="verse-card flowtoken-slide-up"
+                  style={{
+                    animationDelay: `${index * 0.1}s`,
+                    animationDuration: '0.4s',
+                    animationTimingFunction: 'ease-out'
+                  }}
+                >
                   <div className="flex items-start justify-between gap-4 mb-3">
                     <h3 className="font-serif text-lg text-deepBlue">
                       {verse.ref}
@@ -382,8 +394,28 @@ export default function Home() {
           }
         }
 
+        @keyframes slide-up {
+          from {
+            opacity: 0;
+            transform: translateY(20px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+
         .animate-fade-in {
           animation: fade-in 0.5s ease-out;
+        }
+
+        .flowtoken-fade-in {
+          animation: fade-in 0.3s ease-out;
+        }
+
+        .flowtoken-slide-up {
+          animation: slide-up 0.4s ease-out;
+          animation-fill-mode: both;
         }
       `}</style>
     </main>
