@@ -20,6 +20,7 @@ export default function Home() {
   const [error, setError] = useState(null)
   const [streamingExplanation, setStreamingExplanation] = useState('')
   const [isStreaming, setIsStreaming] = useState(false)
+  const [copyFeedback, setCopyFeedback] = useState({ show: false, message: '' })
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -134,6 +135,36 @@ export default function Home() {
     setIsStreaming(false)
   }
 
+  const handleShareVerse = async (verse) => {
+    // Get emoji based on tradition
+    const getEmoji = () => {
+      if (tradition === 'christian') return '✝️'
+      if (tradition === 'jewish') return '✡️'
+      if (tradition === 'harry_potter') return '🪄'
+      if (tradition === 'social_media') return '🐦'
+      return '📖'
+    }
+    
+    const shareText = `"${concern}"\n\n"${verse.text}"\n\n- ${verse.ref} ${getEmoji()}\n\nFind comfort in the texts you love at Solace\nsolace.parakhjaggi.com`
+    
+    try {
+      await navigator.clipboard.writeText(shareText)
+      setCopyFeedback({ show: true, message: 'Quote copied to clipboard!' })
+      
+      // Hide feedback after 2 seconds
+      setTimeout(() => {
+        setCopyFeedback({ show: false, message: '' })
+      }, 2000)
+    } catch (err) {
+      console.error('Failed to copy: ', err)
+      setCopyFeedback({ show: true, message: 'Failed to copy. Please try again.' })
+      
+      setTimeout(() => {
+        setCopyFeedback({ show: false, message: '' })
+      }, 2000)
+    }
+  }
+
   // Memoize results section to prevent re-renders when typing
   const resultsSection = useMemo(() => {
     if (!result && !isStreaming) return null
@@ -166,10 +197,7 @@ export default function Home() {
               References
             </h2>
             <div className="space-y-4">
-              {result.verses.map((verse, index) => {
-                // Debug: log verse data to see if URL is present
-                console.log('Verse data:', verse);
-                return (
+              {result.verses.map((verse, index) => (
                 <div 
                   key={index} 
                   className="verse-card flowtoken-slide-up"
@@ -195,16 +223,26 @@ export default function Home() {
                         verse.ref
                       )}
                     </h3>
-                    <span className="text-xs text-gentleGray bg-warmBeige px-3 py-1 rounded-full">
-                      {verse.translation}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-gentleGray bg-warmBeige px-3 py-1 rounded-full">
+                        {verse.translation}
+                      </span>
+                      <button
+                        onClick={() => handleShareVerse(verse)}
+                        className="p-1 text-gentleGray hover:text-softGold transition-colors"
+                        title="Share this quote"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.367 2.684 3 3 0 00-5.367-2.684z" />
+                        </svg>
+                      </button>
+                    </div>
                   </div>
                   <p className="text-deepBlue leading-relaxed italic">
                     "{verse.text}"
                   </p>
                 </div>
-                );
-              })}
+              ))}
             </div>
           </div>
         )}
@@ -356,6 +394,18 @@ export default function Home() {
 
         {/* Results Section */}
         {resultsSection}
+
+        {/* Copy Feedback Toast */}
+        {copyFeedback.show && (
+          <div className="fixed top-4 right-4 z-50 animate-fade-in">
+            <div className="bg-softGold text-pureWhite px-4 py-3 rounded-lg shadow-lg flex items-center gap-2">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+              <span className="font-medium">{copyFeedback.message}</span>
+            </div>
+          </div>
+        )}
 
         {/* Empty State */}
         {!result && !loading && !isStreaming && (
