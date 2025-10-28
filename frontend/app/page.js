@@ -166,7 +166,10 @@ export default function Home() {
               References
             </h2>
             <div className="space-y-4">
-              {result.verses.map((verse, index) => (
+              {result.verses.map((verse, index) => {
+                // Debug: log verse data to see if URL is present
+                console.log('Verse data:', verse);
+                return (
                 <div 
                   key={index} 
                   className="verse-card flowtoken-slide-up"
@@ -178,7 +181,19 @@ export default function Home() {
                 >
                   <div className="flex items-start justify-between gap-4 mb-3">
                     <h3 className="font-serif text-lg text-deepBlue">
-                      {verse.ref}
+                      {verse.url ? (
+                        <a 
+                          href={verse.url} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="hover:text-softGold transition-colors underline decoration-softGold decoration-2 underline-offset-2 cursor-pointer"
+                          title={`Click to view tweet: ${verse.url}`}
+                        >
+                          {verse.ref}
+                        </a>
+                      ) : (
+                        verse.ref
+                      )}
                     </h3>
                     <span className="text-xs text-gentleGray bg-warmBeige px-3 py-1 rounded-full">
                       {verse.translation}
@@ -188,7 +203,8 @@ export default function Home() {
                     "{verse.text}"
                   </p>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
@@ -238,6 +254,7 @@ export default function Home() {
                 <option value="christian">Christian (Old & New Testament)</option>
                 <option value="jewish">Jewish (Torah & Tanakh)</option>
                 <option value="harry_potter">Harry Potter 🪄</option>
+                <option value="social_media">Social Media 🐦</option>
               </select>
             </div>
 
@@ -371,6 +388,8 @@ export default function Home() {
           <p className="text-sm text-gentleGray">
             {tradition === 'harry_potter' 
               ? 'Harry Potter series by J.K. Rowling' 
+              : tradition === 'social_media'
+              ? 'Real comfort from Twitter/X users'
               : 'Biblical passages from the World English Bible (WEB) translation'}
           </p>
           <p className="text-xs text-gentleGray mt-2">

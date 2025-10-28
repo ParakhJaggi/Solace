@@ -20,6 +20,7 @@ os.environ["LANGCHAIN_API_KEY"] = os.getenv("LANGCHAIN_API_KEY", "")
 os.environ["LANGCHAIN_PROJECT"] = "solace"
 
 from langsmith import traceable
+from tavily import TavilyClient
 from pinecone import Pinecone
 from openai import AsyncOpenAI
 from fastapi import FastAPI, HTTPException
@@ -32,6 +33,7 @@ from contextlib import asynccontextmanager
 PINECONE_API_KEY = os.getenv("PINECONE_API_KEY", "")
 PINECONE_INDEX_HOST = "solace-t42ww4d.svc.aped-4627-b74a.pinecone.io"
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
+TAVILY_API_KEY = os.getenv("TAVILY_API_KEY", "")
 LLM_MODEL = "meta-llama/llama-3.3-70b-instruct:free"  # Good balance of speed & quality
 LLM_TEMPERATURE = 0.7
 
@@ -69,6 +71,14 @@ async def lifespan(app: FastAPI):
     
     # Store in app state
     app_state["pinecone_index"] = index
+    
+    # Initialize Tavily search tool
+    if TAVILY_API_KEY:
+        tavily_client = TavilyClient(TAVILY_API_KEY)
+        app_state["tavily_client"] = tavily_client
+        print(f"   ✓ Tavily client initialized")
+    else:
+        print(f"   ⚠️  Tavily API key not set - social media search disabled")
     
     # Get stats
     stats = index.describe_index_stats()
@@ -111,6 +121,11 @@ class Verse(BaseModel):
     translation: str = "WEB"
     score: float
     book_name: str = ""  # For diversity filtering
+    url: str = ""  # For social media links
+    
+    class Config:
+        # Ensure all fields are included in serialization
+        exclude_unset = False
 
 
 # Health check
@@ -135,6 +150,63 @@ async def health_check():
 
 
 # Helper functions
+@traceable(run_type="tool", name="search_twitter")
+async def search_twitter_content(query: str, tavily_client):
+    """Search Twitter for relevant comfort and encouragement posts"""
+    try:
+        # Use the exact settings that work
+        response = tavily_client.search(
+            query=query,
+            include_raw_content="text",
+            include_domains=["x.com"]
+        )
+        
+        # Process results into tweet-like format
+        tweets = []
+        if response and 'results' in response:
+            for result in response['results']:
+                # Extract tweet content and metadata
+                content = result.get('content', '') or result.get('raw_content', '')
+                url = result.get('url', '')
+                title = result.get('title', '')
+                
+                # Only process X.com URLs (since we're only searching x.com)
+                if not ('x.com/' in url):
+                    continue
+                
+                # Skip if content is just the JavaScript disabled message
+                if "JavaScript is disabled" in content or "enable JavaScript" in content:
+                    continue
+                
+                # Skip if content is too short or doesn't look like a tweet
+                if len(content.strip()) < 20:
+                    continue
+                
+                
+                # Extract username from X.com URL
+                username = "Unknown"
+                if 'x.com/' in url:
+                    try:
+                        username = url.split('x.com/')[1].split('/')[0]
+                        if username.startswith('@'):
+                            username = username[1:]  # Remove @ if present
+                    except:
+                        pass
+                
+                tweets.append({
+                    'content': content,
+                    'username': username,
+                    'url': url,
+                    'platform': 'Twitter'
+                })
+        
+        return tweets
+        
+    except Exception as e:
+        print(f"Error searching Twitter: {e}")
+        return []
+
+
 @traceable(run_type="retriever", name="search_pinecone")
 async def search_pinecone(index, query: str, k: int, testament_filter: list = None):
     """Search Pinecone for relevant verses (integrated embedding)"""
@@ -371,7 +443,154 @@ async def recommend_verses_stream(request: RecommendRequest):
     if not index:
         raise HTTPException(status_code=503, detail="Service not ready")
     
-    # Determine testament filter
+    # Handle social media flow
+    if request.tradition == "social_media":
+        tavily_client = app_state.get("tavily_client")
+        if not tavily_client:
+            raise HTTPException(status_code=503, detail="Social media search not available")
+        
+        # Wrap the social media process in a traceable context
+        @traceable(run_type="chain", name="recommend_social_media_stream")
+        async def execute_social_media_recommendation():
+            # Step 1: Search Twitter
+            tweets = await search_twitter_content(request.issue, tavily_client)
+            
+            if not tweets:
+                return None, "No relevant social media content found"
+            
+            # Format tweets as verses
+            verses = []
+            for i, tweet in enumerate(tweets):
+                verses.append(Verse(
+                    ref=f"@{tweet['username']}",
+                    text=tweet['content'][:1500] + "..." if len(tweet['content']) > 1500 else tweet['content'],
+                    translation=tweet['platform'],
+                    score=0.9 - (i * 0.1),  # Decreasing relevance score
+                    book_name=tweet['username'],
+                    url=tweet['url']
+                ))
+            
+            return verses, None
+        
+        async def generate_social_stream():
+            try:
+                # Execute social media retrieval
+                verses, error = await execute_social_media_recommendation()
+                
+                if error:
+                    yield f"data: {json.dumps({'error': error})}\n\n"
+                    return
+                
+                # Send verses first
+                verses_data = {
+                    "type": "verses",
+                    "verses": [
+                        {
+                            "ref": v.ref,
+                            "text": v.text,
+                            "translation": v.translation,
+                            "score": v.score,
+                            "url": v.url
+                        } for v in verses
+                    ]
+                }
+                yield f"data: {json.dumps(verses_data)}\n\n"
+                
+                # Step 2: Stream LLM explanation for social media
+                @traceable(run_type="llm", name="generate_social_explanation_stream")
+                async def create_social_llm_stream():
+                    # Build prompt for social media content
+                    tweets_text = "\n\n".join([
+                        f"@{v.ref}: \"{v.text}\""
+                        for v in verses
+                    ])
+                    tweet_refs = ", ".join([v.ref for v in verses])
+                    
+                    system_prompt = """You are a compassionate guide who finds wisdom in social media. Write 2-4 paragraphs of comfort and encouragement using ONLY the Twitter posts provided.
+
+CRITICAL RULES:
+- ONLY reference the specific tweets provided below - DO NOT mention any other content
+- Use **bold** for the exact usernames INLINE within sentences (e.g., "as @username shared")
+- NEVER put usernames on their own separate line
+- Start immediately with empathy and understanding
+- Focus on how these real people's experiences can help and encourage
+- Use warm, personal "you" language
+- Reference the authenticity and relatability of social media wisdom
+- Avoid: made-up content, personal sign-offs
+- Do NOT say "I'm thinking of you", "I'll be praying for you"
+- FORMAT: Write in 2-4 separate paragraphs with blank lines between them
+
+Just write the encouragement directly using ONLY the provided tweets."""
+                    
+                    user_prompt = f"""Person's concern: "{request.issue}"
+
+The ONLY tweets you may reference are: {tweet_refs}
+
+Here are the tweets:
+
+{tweets_text}
+
+Write your response (2-4 paragraphs) using ONLY these tweets."""
+                    
+                    # Stream from LLM
+                    return await openai_client.chat.completions.create(
+                        extra_headers={
+                            "HTTP-Referer": "https://solace.app",
+                            "X-Title": "Solace"
+                        },
+                        model=LLM_MODEL,
+                        messages=[
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": user_prompt}
+                        ],
+                        temperature=LLM_TEMPERATURE,
+                        max_tokens=600,
+                        stream=True
+                    )
+                
+                # Get the stream within traced context
+                stream = await create_social_llm_stream()
+                
+                # Accumulate chunks for cleaning
+                full_text = ""
+                async for chunk in stream:
+                    if chunk.choices[0].delta.content:
+                        content = chunk.choices[0].delta.content
+                        full_text += content
+                        
+                        # Clean content in real-time to remove special tokens
+                        cleaned_content = content
+                        # Remove special tokens from chunks
+                        special_tokens = [
+                            r'<\|begin_of_sentence\|>',
+                            r'<｜begin▁of▁sentence｜>',
+                            r'<｜begin of sentence｜>',
+                            r'<\|end_of_text\|>',
+                            r'<｜end▁of▁text｜>',
+                            r'<eos>',
+                            r'</s>'
+                        ]
+                        for token in special_tokens:
+                            cleaned_content = re.sub(token, '', cleaned_content, flags=re.IGNORECASE)
+                        
+                        # Only send if there's content after cleaning
+                        if cleaned_content:
+                            data = {
+                                "type": "explanation_chunk",
+                                "content": cleaned_content
+                            }
+                            yield f"data: {json.dumps(data)}\n\n"
+                
+                # Send done signal
+                yield f"data: {json.dumps({'type': 'done'})}\n\n"
+                
+            except Exception as e:
+                print(f"Error in social media stream: {e}", flush=True)
+                yield f"data: {json.dumps({'error': str(e)})}\n\n"
+        
+        return StreamingResponse(generate_social_stream(), media_type="text/event-stream")
+    
+    # Determine testament filter for traditional sources
     testament_filter = None
     if request.tradition == "jewish":
         testament_filter = ["OT"]
@@ -419,7 +638,8 @@ async def recommend_verses_stream(request: RecommendRequest):
                         "ref": v.ref,
                         "text": v.text,
                         "translation": v.translation,
-                        "score": v.score
+                        "score": v.score,
+                        "url": v.url
                     } for v in verses
                 ]
             }
@@ -560,7 +780,7 @@ async def root():
         "name": "Solace - Find Comfort in the Texts You Love",
         "version": "0.6.0",
         "status": "Pinecone + DeepSeek V3.1 + Streaming ✅",
-        "sources": ["Bible (Christian)", "Torah/Tanakh (Jewish)", "Harry Potter"],
+        "sources": ["Bible (Christian)", "Torah/Tanakh (Jewish)", "Harry Potter", "Social Media (Twitter)"],
         "memory": "~200MB (serverless embeddings)",
         "features": ["Streaming responses", "Real-time LLM generation", "Book diversity filtering"],
         "endpoints": {
