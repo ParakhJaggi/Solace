@@ -1,0 +1,14 @@
+# .github/workflows/keep-warm.yml
+name: keep-warm
+on:
+  schedule:
+    - cron: "*/10 * * * *"   # every 10 minutes
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Curl health endpoint
+        run: |
+          curl -fsS https://solace-q068.onrender.com/healthz || true
