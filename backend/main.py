@@ -32,7 +32,7 @@ from contextlib import asynccontextmanager
 PINECONE_API_KEY = os.getenv("PINECONE_API_KEY", "")
 PINECONE_INDEX_HOST = "solace-t42ww4d.svc.aped-4627-b74a.pinecone.io"
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
-LLM_MODEL = "deepseek/deepseek-chat-v3.1:free"
+LLM_MODEL = "meta-llama/llama-3.3-70b-instruct:free"  # Good balance of speed & quality
 LLM_TEMPERATURE = 0.7
 
 # Retrieval settings
