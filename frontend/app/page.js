@@ -68,7 +68,22 @@ export default function Home() {
             try {
               const data = JSON.parse(line.slice(6))
               
-              if (data.type === 'verses') {
+              if (data.type === 'crisis') {
+                // Crisis response - show message without verses
+                setResult({ 
+                  verses: [], 
+                  explanation: data.content 
+                })
+                setLoading(false)
+                
+                // Scroll to results
+                setTimeout(() => {
+                  document.getElementById('results')?.scrollIntoView({ 
+                    behavior: 'smooth', 
+                    block: 'start' 
+                  })
+                }, 100)
+              } else if (data.type === 'verses') {
                 // Store verses and show them immediately
                 tempVerses = data.verses
                 setResult({ verses: tempVerses, explanation: '' })
@@ -141,7 +156,7 @@ export default function Home() {
         )}
 
         {/* Verses */}
-        {result?.verses && (
+        {result?.verses && result.verses.length > 0 && (
           <div>
             <h2 className="text-xl font-serif text-deepBlue mb-4">
               References

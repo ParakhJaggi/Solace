@@ -340,6 +340,32 @@ async def recommend_verses_stream(request: RecommendRequest):
     if len(request.issue) > 500:
         raise HTTPException(status_code=400, detail="Input too long. Please keep your message under 500 characters.")
     
+    # Crisis detection - check for self-harm or suicide language
+    crisis_keywords = [
+        "kill myself", "suicide", "end my life", "want to die", 
+        "self-harm", "hurt myself", "cutting", "suicidal",
+        "end it all", "better off dead", "no reason to live"
+    ]
+    is_crisis = any(keyword in request.issue.lower() for keyword in crisis_keywords)
+    
+    if is_crisis:
+        # Return crisis resources immediately, skip all verse search
+        async def crisis_stream():
+            crisis_message = (
+                "I'm deeply concerned about what you're going through. **Please reach out for immediate support:**\n\n"
+                "• **National Suicide Prevention Lifeline**: **988** (24/7, call or text)\n"
+                "• **Crisis Text Line**: Text **HOME** to **741741**\n"
+                "• **International Association for Suicide Prevention**: https://www.iasp.info/resources/Crisis_Centres/\n\n"
+                "Your life has immeasurable value. Please don't face this alone—trained counselors are ready to help right now. "
+                "They understand what you're going through and can provide the support you need."
+            )
+            
+            # Send as explanation chunks
+            yield f"data: {json.dumps({'type': 'crisis', 'content': crisis_message})}\n\n"
+            yield f"data: {json.dumps({'type': 'done'})}\n\n"
+        
+        return StreamingResponse(crisis_stream(), media_type="text/event-stream")
+    
     index = app_state.get("pinecone_index")
     
     if not index:
