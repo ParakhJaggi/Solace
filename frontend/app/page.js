@@ -2,7 +2,7 @@
  * Solace - Find comfort in the texts you love
  * 
  * Main application page
- * Supports: Bible (Christian/Jewish) and Harry Potter
+ * Supports: Bible (Christian/Jewish), Harry Potter, and Social Media
  */
 
 'use client'
@@ -11,6 +11,7 @@ import { useState, useMemo } from 'react'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL
 const MAX_CHARS = 500
+const TOAST_DURATION = 2000 // 2 seconds
 
 export default function Home() {
   const [concern, setConcern] = useState('')
@@ -151,17 +152,17 @@ export default function Home() {
       await navigator.clipboard.writeText(shareText)
       setCopyFeedback({ show: true, message: 'Quote copied to clipboard!' })
       
-      // Hide feedback after 2 seconds
+      // Hide feedback after timeout
       setTimeout(() => {
         setCopyFeedback({ show: false, message: '' })
-      }, 2000)
+      }, TOAST_DURATION)
     } catch (err) {
       console.error('Failed to copy: ', err)
       setCopyFeedback({ show: true, message: 'Failed to copy. Please try again.' })
       
       setTimeout(() => {
         setCopyFeedback({ show: false, message: '' })
-      }, 2000)
+      }, TOAST_DURATION)
     }
   }
 

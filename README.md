@@ -1,10 +1,10 @@
-# 🕊️ Solace
+# Solace
 
 **Find comfort in the texts you love.**
 
 A RAG (Retrieval Augmented Generation) application that helps users find comforting passages when they're going through difficult times. Search across religious texts (Bible) or beloved stories (Harry Potter) and receive personalized, empathetic explanations.
 
-## 🎯 Core Value Proposition
+## Core Value Proposition
 
 **User types what they're going through → gets 3 highly relevant passages + 2-4 paragraphs of empathetic explanation.**
 
@@ -14,40 +14,42 @@ A RAG (Retrieval Augmented Generation) application that helps users find comfort
 2. **"I feel like an outsider."** → Passages about belonging + comforting context
 3. **"I'm grieving a loss."** → Passages about hope and healing + empathetic support
 
-## 🌟 Features
+## Features
 
 ### Multi-Source Retrieval
-- ✅ **Christian Bible** (Old & New Testament) - 31,000+ verses
-- ✅ **Jewish Texts** (Torah/Tanakh only) - Old Testament filtering
-- ✅ **Harry Potter** 🪄 - 7 books, ~6,000+ passages
+- **Christian Bible** (Old & New Testament) - 31,000+ verses
+- **Jewish Texts** (Torah/Tanakh only) - Old Testament filtering
+- **Harry Potter** - 7 books, ~6,000+ passages
+- **Social Media** - Real tweets and posts for comfort
 
 ### Intelligent Search Pipeline
-- ✅ **Semantic search** using Pinecone's `nvidia/llama-text-embed-v2` (1024-dim embeddings)
-- ✅ **Two-stage retrieval**: Vector search (k=50) → Reranking (n=3) with `pinecone-rerank-v0`
-- ✅ **Book diversity filter**: Prevents all results from same book (e.g., all Psalms)
-- ✅ **Metadata filtering**: Testament-based filtering (OT, NT, HP)
+- **Semantic search** using Pinecone's `nvidia/llama-text-embed-v2` (1024-dim embeddings)
+- **Two-stage retrieval**: Vector search (k=50) → Reranking (n=3) with `pinecone-rerank-v0`
+- **Book diversity filter**: Prevents all results from same book (e.g., all Psalms)
+- **Metadata filtering**: Testament-based filtering (OT, NT, HP)
 
 ### AI-Powered Synthesis
-- ✅ **LLM explanations** using DeepSeek V3.1 (2-4 paragraphs, ~200-300 words)
-- ✅ **Tradition-aware prompts**: Different tone for Jewish/Christian/Harry Potter contexts
-- ✅ **Crisis detection**: Detects self-harm language and provides hotline resources
-- ✅ **Moderation handling**: Graceful fallback for false-positive content flags
+- **LLM explanations** using DeepSeek V3.1 (2-4 paragraphs, ~200-300 words)
+- **Tradition-aware prompts**: Different tone for Jewish/Christian/Harry Potter contexts
+- **Crisis detection**: Detects self-harm language and provides hotline resources
+- **Moderation handling**: Graceful fallback for false-positive content flags
 
 ### Production-Ready
-- ✅ **FastAPI backend** with LangSmith tracing
-- ✅ **Next.js frontend** with static site generation
-- ✅ **Character limits** (500 chars) with validation
-- ✅ **Error handling**: Graceful fallbacks for rate limits, moderation, etc.
-- ✅ **Enter key submission** for better UX
-- ✅ **Deployed** on Render (frontend + backend)
+- **FastAPI backend** with LangSmith tracing
+- **Next.js frontend** with static site generation
+- **Character limits** (500 chars) with validation
+- **Error handling**: Graceful fallbacks for rate limits, moderation, etc.
+- **Enter key submission** for better UX
+- **Deployed** on Render (frontend + backend)
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 - Python 3.9+
 - Node.js 18+
 - Pinecone account (free tier)
 - OpenRouter account (free tier)
+- Tavily account (for social media search)
 
 ### 1. Set Up the Vector Database
 
@@ -85,6 +87,7 @@ cd backend
 cat > .env << EOF
 PINECONE_API_KEY=your_pinecone_key
 OPENROUTER_API_KEY=your_openrouter_key
+TAVILY_API_KEY=your_tavily_key
 LANGCHAIN_API_KEY=your_langsmith_key  # Optional for tracing
 EOF
 
@@ -114,7 +117,7 @@ npm run dev
 
 Frontend runs on `http://localhost:3000`
 
-## 🏗️ Architecture
+## Architecture
 
 ### Data Flow
 
@@ -130,6 +133,7 @@ User Input: "I'm anxious about work"
 │    • jewish → ["OT"]                    │
 │    • christian → ["OT", "NT"]           │
 │    • harry_potter → ["HP"]              │
+│    • social_media → Tavily search       │
 └───────────────┬─────────────────────────┘
                 │
                 ▼
@@ -169,6 +173,7 @@ User Input: "I'm anxious about work"
 │   - Jewish: Torah/Tanakh language       │
 │   - Christian: Non-denominational       │
 │   - Harry Potter: Story wisdom          │
+│   - Social Media: Real experiences      │
 │ • Crisis detection + hotlines           │
 │ • Moderation retry logic                │
 │ • 2-4 paragraphs of comfort             │
@@ -184,7 +189,8 @@ User Input: "I'm anxious about work"
 │       "ref": "Philippians 4:6-7",       │
 │       "text": "...",                    │
 │       "translation": "WEB",             │
-│       "score": 0.89                     │
+│       "score": 0.89,                    │
+│       "url": "https://..."              │
 │     }                                   │
 │   ],                                    │
 │   "explanation": "..."                  │
@@ -192,7 +198,7 @@ User Input: "I'm anxious about work"
 └─────────────────────────────────────────┘
 ```
 
-## 🤖 Technology Stack
+## Technology Stack
 
 ### Backend
 - **Framework**: FastAPI
@@ -200,8 +206,9 @@ User Input: "I'm anxious about work"
 - **Vector Database**: Pinecone (serverless)
 - **Reranker**: Pinecone Rerank (`pinecone-rerank-v0`)
 - **LLM**: DeepSeek V3.1 via OpenRouter
+- **Social Search**: Tavily API
 - **Tracing**: LangSmith (optional)
-- **Deployment**: Render / Oracle Cloud Free Tier
+- **Deployment**: Render
 
 ### Frontend
 - **Framework**: Next.js 14 (React)
@@ -212,9 +219,10 @@ User Input: "I'm anxious about work"
 ### Data
 - **Bible**: World English Bible (WEB) - Public Domain XML
 - **Harry Potter**: [gastonstat/harry-potter-data](https://github.com/gastonstat/harry-potter-data) CSV
+- **Social Media**: Real-time Twitter/X content via Tavily
 - **Chunking**: 3 verses (Bible) / 10 lines (Harry Potter)
 
-## 📊 Project Structure
+## Project Structure
 
 ```
 ask-book/
@@ -222,19 +230,19 @@ ask-book/
 │   ├── books/
 │   │   └── harry_potter_books.csv      # HP source data (95K lines)
 │   ├── engwebp_vpl.xml                 # Bible XML source (31K verses)
-│   ├── embed_bible_pinecone.py         # Bible → Pinecone embedder ⭐
-│   ├── embed_harry_potter_pinecone.py  # Harry Potter → Pinecone embedder ⭐
+│   ├── embed_bible_pinecone.py         # Bible → Pinecone embedder
+│   ├── embed_harry_potter_pinecone.py  # Harry Potter → Pinecone embedder
 │   ├── requirements_pinecone.txt       # Embedding dependencies
 │   └── .env                            # PINECONE_API_KEY
 │
 ├── backend/
-│   ├── main.py                         # FastAPI app ⭐
+│   ├── main.py                         # FastAPI app
 │   ├── requirements.txt                # Backend dependencies
 │   └── .env                            # API keys
 │
 ├── frontend/
 │   ├── app/
-│   │   ├── page.js                     # Main app page ⭐
+│   │   ├── page.js                     # Main app page
 │   │   ├── layout.js                   # Root layout
 │   │   └── globals.css                 # Global styles
 │   ├── tailwind.config.js              # Tailwind config
@@ -245,7 +253,7 @@ ask-book/
 └── README.md                           # This file
 ```
 
-## 📈 Performance
+## Performance
 
 ### Latency (p95)
 - **Total request**: ~2-3 seconds
@@ -260,13 +268,14 @@ ask-book/
   - Search: ~$0.02 (serverless, 1M vectors)
   - Reranking: Free tier (10k/month)
 - **OpenRouter (DeepSeek V3.1)**: Free tier
+- **Tavily**: Free tier (1000 searches/month)
 - **Total**: Effectively free on free tiers
 
 ### Memory Footprint
 - **Backend**: ~200MB RAM (no local embeddings!)
 - **Frontend**: Static site (negligible)
 
-## 🔍 How It Works
+## How It Works
 
 ### Chunking Strategy
 
@@ -316,6 +325,14 @@ chunk = {
 - Avoid religious language"
 ```
 
+**Social Media**
+```
+"You are a compassionate guide who finds wisdom in social media...
+- Reference specific tweets and usernames
+- Focus on real people's experiences
+- Emphasize authenticity and relatability"
+```
+
 ### Crisis Detection
 
 Detects keywords like "suicide", "self-harm", "want to die" and immediately returns:
@@ -330,32 +347,23 @@ Please reach out for immediate support:
 Your life has immeasurable value..."
 ```
 
-## 🎯 API Reference
+## API Reference
 
-### POST `/recommend`
+### POST `/recommend/stream`
 
 **Request**
 ```json
 {
   "issue": "I'm feeling anxious about work",
-  "tradition": "christian"  // "christian" | "jewish" | "harry_potter"
+  "tradition": "christian"  // "christian" | "jewish" | "harry_potter" | "social_media"
 }
 ```
 
-**Response**
-```json
-{
-  "verses": [
-    {
-      "ref": "Philippians 4:6-7",
-      "text": "Don't be anxious about anything...",
-      "translation": "WEB",
-      "score": 0.89,
-      "book_name": "Philippians"
-    }
-  ],
-  "explanation": "I hear the weight in your words, the anxiety..."
-}
+**Response (Streaming)**
+```
+data: {"type": "verses", "verses": [...]}
+data: {"type": "explanation_chunk", "content": "..."}
+data: {"type": "done"}
 ```
 
 **Errors**
@@ -375,11 +383,9 @@ Your life has immeasurable value..."
 }
 ```
 
-## 🚀 Deployment
+## Deployment
 
-### Backend (Render / Oracle Cloud)
-
-**Render (Recommended)**
+### Backend (Render)
 ```bash
 # render.yaml (auto-detected)
 services:
@@ -393,18 +399,8 @@ services:
         sync: false
       - key: OPENROUTER_API_KEY
         sync: false
-```
-
-**Oracle Cloud Free Tier**
-```bash
-# SSH to instance
-ssh -i key.pem ubuntu@instance-ip
-
-# Copy backend files
-scp -r backend/ ubuntu@instance-ip:~/
-
-# Run with Docker (optional)
-docker-compose up -d
+      - key: TAVILY_API_KEY
+        sync: false
 ```
 
 ### Frontend (Render Static Site)
@@ -418,7 +414,7 @@ Publish Directory: frontend/out
 NEXT_PUBLIC_API_URL=https://your-backend.onrender.com
 ```
 
-## 🛠️ Development
+## Development
 
 ### Adding a New Source
 
@@ -449,7 +445,7 @@ elif tradition == "your_source":
 <option value="your_source">Your Source Name</option>
 ```
 
-## 🤝 Contributing
+## Contributing
 
 Ideas for future contributions:
 - [ ] Add more sources (Lord of the Rings, Quran, Buddhist texts)
@@ -457,26 +453,27 @@ Ideas for future contributions:
 - [ ] User accounts + saved passages
 - [ ] Multilingual support
 - [ ] Voice input
-- [ ] Sharing passages on social media
+- [ ] Enhanced social media sharing features
 
-## 📄 License
+## License
 
 - **Code**: MIT License
 - **Bible Text**: World English Bible (Public Domain)
 - **Harry Potter Text**: Educational/transformative use, see [gastonstat/harry-potter-data](https://github.com/gastonstat/harry-potter-data)
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - [Pinecone](https://www.pinecone.io/) for serverless vector database + reranker
 - [OpenRouter](https://openrouter.ai/) for LLM API access
 - [DeepSeek](https://www.deepseek.com/) for the V3.1 model
+- [Tavily](https://tavily.com/) for social media search
 - [World English Bible](https://ebible.org/web/) translators
 - [gastonstat](https://github.com/gastonstat) for Harry Potter dataset
 - [LangSmith](https://smith.langchain.com/) for tracing tools
 
 ---
 
-**Built with ❤️ to provide comfort and encouragement through the texts you love.**
+**Built to provide comfort and encouragement through the texts you love.**
 
 *"Happiness can be found, even in the darkest of times, if one only remembers to turn on the light." — Albus Dumbledore*
 

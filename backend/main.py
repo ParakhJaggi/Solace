@@ -2,7 +2,7 @@
 Solace - FastAPI Backend
 
 Find comfort in the texts you love.
-Supports: Bible (Christian/Jewish) and Harry Potter
+Supports: Bible (Christian/Jewish), Harry Potter, and Social Media
 
 Ultra-lightweight: ~200MB memory (serverless embeddings via Pinecone)
 """
