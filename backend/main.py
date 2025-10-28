@@ -8,6 +8,7 @@ Ultra-lightweight: ~200MB memory (serverless embeddings via Pinecone)
 """
 
 import os
+import re
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -23,6 +24,7 @@ from pinecone import Pinecone
 from openai import AsyncOpenAI
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from contextlib import asynccontextmanager
 
@@ -111,11 +113,6 @@ class Verse(BaseModel):
     book_name: str = ""  # For diversity filtering
 
 
-class RecommendResponse(BaseModel):
-    verses: list[Verse]
-    explanation: str
-
-
 # Health check
 @app.get("/healthz")
 async def health_check():
@@ -137,7 +134,7 @@ async def health_check():
     }
 
 
-# Helper functions with tracing
+# Helper functions
 @traceable(run_type="retriever", name="search_pinecone")
 async def search_pinecone(index, query: str, k: int, testament_filter: list = None):
     """Search Pinecone for relevant verses (integrated embedding)"""
@@ -172,7 +169,7 @@ async def search_pinecone(index, query: str, k: int, testament_filter: list = No
 @traceable(run_type="tool", name="rerank_results")
 def rerank_results(query: str, matches, top_n: int):
     """Rerank results using Pinecone's hosted reranker"""
-    pc = app_state["pinecone_client"]
+    pc = Pinecone(api_key=PINECONE_API_KEY)
     
     # Convert matches to documents for reranking
     documents = []
@@ -282,7 +279,6 @@ def format_results(matches, n: int, ensure_diversity: bool = True):
 
 def clean_llm_output(text: str) -> str:
     """Remove special tokens and artifacts from LLM output"""
-    import re
     
     # Remove common special tokens
     patterns = [
@@ -328,157 +324,14 @@ def clean_llm_output(text: str) -> str:
     return text.strip()
 
 
-@traceable(run_type="llm", name="generate_explanation")
-async def generate_explanation(issue: str, verses: list[Verse], tradition: str = "christian") -> str:
-    """Generate empathetic explanation using LLM"""
-    
-    # Crisis detection
-    crisis_keywords = [
-        "kill myself", "suicide", "end my life", "want to die", 
-        "self-harm", "hurt myself", "cutting", "suicidal"
-    ]
-    if any(keyword in issue.lower() for keyword in crisis_keywords):
-        return (
-            "I'm deeply concerned about what you're going through. Please reach out for immediate support:\n\n"
-            "• **National Suicide Prevention Lifeline**: 988 (24/7)\n"
-            "• **Crisis Text Line**: Text HOME to 741741\n"
-            "• **International Association for Suicide Prevention**: https://www.iasp.info/resources/Crisis_Centres/\n\n"
-            "Your life has immeasurable value. Please don't face this alone—trained counselors are ready to help right now."
-        )
-    
-    # Build prompt with verse list
-    verses_text = "\n\n".join([
-        f"**{v.ref}**{' (' + v.translation + ')' if v.translation != 'Original' else ''}\n\"{v.text[:300]}...\""
-        for v in verses
-    ])
-    
-    # Create explicit verse reference list
-    verse_refs = ", ".join([v.ref for v in verses])
-    
-    # Adjust prompt based on tradition
-    if tradition == "jewish":
-        system_prompt = """You are a compassionate Jewish guide. Write 2-4 paragraphs of comfort and encouragement using ONLY the Torah/Tanakh verses provided.
-
-CRITICAL RULES:
-- ONLY reference the specific verses provided below - DO NOT mention any other verses
-- Use **bold** for the exact verse references given (e.g., **Psalm 55:22**)
-- Start immediately with empathy and understanding
-- Focus on hope, comfort, and Hashem's love
-- Use warm, personal "you" language
-- Reference Jewish concepts naturally (Torah, mitzvot, tikkun olam)
-- Avoid: Christian terminology, New Testament, made-up citations
-- Do NOT say "I'm thinking of you", "I'll be praying for you"
-
-Just write the encouragement directly using ONLY the provided verses."""
-    elif tradition == "harry_potter":
-        system_prompt = """You are a compassionate guide who finds wisdom in stories. Write 2-4 paragraphs of comfort and encouragement using ONLY the Harry Potter passages provided.
-
-CRITICAL RULES:
-- ONLY reference the specific passages provided below - DO NOT mention any other scenes
-- Use **bold** for the exact references given (e.g., **Deathly Hallows, Chapter 33**)
-- Start immediately with empathy and understanding
-- Draw parallels between their situation and the themes in the passages (courage, friendship, overcoming fear, belonging, loss, hope)
-- Reference characters, moments, and themes naturally (Harry's courage, Dumbledore's wisdom, the power of friendship)
-- Use warm, personal "you" language - connect the story's wisdom to their life
-- Avoid: religious language, made-up scenes, personal sign-offs
-- Do NOT say "I'm thinking of you", "May you find peace"
-
-Just write the encouragement directly, connecting the story's wisdom to their experience using ONLY the provided passages."""
-    else:  # christian
-        system_prompt = """You are a compassionate, non-denominational Christian guide. Write 2-4 paragraphs of comfort and encouragement using ONLY the Bible verses provided.
-
-CRITICAL RULES:
-- ONLY reference the specific verses provided below - DO NOT mention any other verses
-- Use **bold** for the exact verse references given (e.g., **Psalm 23:1**)
-- Start immediately with empathy and understanding
-- Focus on hope, comfort, and God's love
-- Use warm, personal "you" language
-- Avoid: theological jargon, made-up citations, personal sign-offs
-- Do NOT say "I'm thinking of you", "I'll be praying for you"
-
-Just write the encouragement directly using ONLY the provided verses."""
-
-    user_prompt = f"""Person's concern: "{issue}"
-
-The ONLY passages you may reference are: {verse_refs}
-
-Here are the passages:
-
-{verses_text}
-
-Write your response (2-4 paragraphs) using ONLY these passages."""
-
-    # Call LLM
-    try:
-        completion = await openai_client.chat.completions.create(
-            extra_headers={
-                "HTTP-Referer": "https://solace.app",
-                "X-Title": "Solace"
-            },
-            model=LLM_MODEL,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ],
-            temperature=LLM_TEMPERATURE,
-            max_tokens=600
-        )
-        
-        explanation = completion.choices[0].message.content.strip()
-        # Clean special tokens and artifacts
-        explanation = clean_llm_output(explanation)
-        return explanation
-            
-    except Exception as e:
-        error_str = str(e)
-        print(f"Error calling LLM: {e}", flush=True)
-        
-        # Check if it's a moderation false positive (happens with emotional OT verses)
-        if "403" in error_str and ("moderation" in error_str.lower() or "flagged" in error_str.lower()):
-            print("⚠️  Moderation false positive detected, using simpler prompt...", flush=True)
-            
-            # Retry with a simpler, less detailed prompt
-            try:
-                simple_prompt = f"""Write 2-3 paragraphs offering comfort and hope for someone who said: "{issue}"
-                
-Use these passages for guidance: {verse_refs}
-
-Be warm and empathetic."""
-                
-                completion = await openai_client.chat.completions.create(
-                    extra_headers={
-                        "HTTP-Referer": "https://solace.app",
-                        "X-Title": "Solace"
-                    },
-                    model=LLM_MODEL,
-                    messages=[
-                        {"role": "user", "content": simple_prompt}
-                    ],
-                    temperature=LLM_TEMPERATURE,
-                    max_tokens=600
-                )
-                
-                explanation = completion.choices[0].message.content.strip()
-                explanation = clean_llm_output(explanation)
-                return explanation
-            except Exception as retry_error:
-                print(f"Retry also failed: {retry_error}", flush=True)
-        
-        # Fallback for any error
-        verse_refs = ", ".join([v.ref for v in verses])
-        return f"These passages ({verse_refs}) offer comfort for what you're experiencing. Take time to read and reflect on them—they contain timeless wisdom for your situation."
-
-
-# Main endpoint
-@app.post("/recommend", response_model=RecommendResponse)
-@traceable(run_type="chain", name="recommend_verses")
-async def recommend_verses(request: RecommendRequest):
+@app.post("/recommend/stream")
+async def recommend_verses_stream(request: RecommendRequest):
     """
-    Get passage recommendations based on user's concern
+    Stream passage recommendations with real-time LLM generation
     
-    Supports: Bible (Christian/Jewish) and Harry Potter
-    Uses Pinecone for serverless vector search (no local embeddings!)
+    Returns Server-Sent Events (SSE) stream with verses + streaming explanation
     """
+    import json
     
     # Validate input
     if not request.issue or not request.issue.strip():
@@ -492,41 +345,183 @@ async def recommend_verses(request: RecommendRequest):
     if not index:
         raise HTTPException(status_code=503, detail="Service not ready")
     
-    # Determine testament filter based on tradition
+    # Determine testament filter
     testament_filter = None
     if request.tradition == "jewish":
-        testament_filter = ["OT"]  # Only Old Testament
+        testament_filter = ["OT"]
     elif request.tradition == "christian":
-        testament_filter = ["OT", "NT"]  # Both testaments
+        testament_filter = ["OT", "NT"]
     elif request.tradition == "harry_potter":
-        testament_filter = ["HP"]  # Harry Potter books
+        testament_filter = ["HP"]
     
-    # Step 1: Search Pinecone (it handles embedding automatically)
-    matches = await search_pinecone(index, request.issue, RETRIEVAL_K, testament_filter)
-    
-    if not matches:
-        raise HTTPException(status_code=404, detail="No verses found")
-    
-    # Step 2: Rerank with Pinecone's hosted reranker (graceful fallback if limit hit)
-    if USE_RERANKER:
-        try:
-            matches = rerank_results(request.issue, matches, RETRIEVAL_N)
-            verses = format_results(matches, RETRIEVAL_N, ensure_diversity=False)  # Already top N from reranker
-            print("✓ Reranked results", flush=True)
-        except Exception as e:
-            print(f"⚠️  Reranker failed ({e}), falling back to diversity filter", flush=True)
+    # Wrap the entire streaming process in a traceable context
+    @traceable(run_type="chain", name="recommend_verses_stream")
+    async def execute_recommendation():
+        # Step 1: Search Pinecone
+        matches = await search_pinecone(index, request.issue, RETRIEVAL_K, testament_filter)
+        
+        if not matches:
+            return None, "No verses found"
+        
+        # Step 2: Rerank
+        if USE_RERANKER:
+            try:
+                matches = rerank_results(request.issue, matches, RETRIEVAL_N)
+                verses = format_results(matches, RETRIEVAL_N, ensure_diversity=False)
+            except Exception as e:
+                print(f"⚠️  Reranker failed ({e}), falling back to diversity filter", flush=True)
+                verses = format_results(matches, RETRIEVAL_N, ensure_diversity=True)
+        else:
             verses = format_results(matches, RETRIEVAL_N, ensure_diversity=True)
-    else:
-        # Just use diversity filtering
-        verses = format_results(matches, RETRIEVAL_N, ensure_diversity=True)
+        
+        return verses, None
     
-    # Step 3: Generate explanation with LLM
-    explanation = await generate_explanation(request.issue, verses, request.tradition)
+    async def generate_stream():
+        try:
+            # Execute all retrieval steps within tracing context
+            verses, error = await execute_recommendation()
+            
+            if error:
+                yield f"data: {json.dumps({'error': error})}\n\n"
+                return
+            
+            # Send verses first
+            verses_data = {
+                "type": "verses",
+                "verses": [
+                    {
+                        "ref": v.ref,
+                        "text": v.text,
+                        "translation": v.translation,
+                        "score": v.score
+                    } for v in verses
+                ]
+            }
+            yield f"data: {json.dumps(verses_data)}\n\n"
+            
+            # Step 3: Stream LLM explanation (wrapped in traceable context)
+            @traceable(run_type="llm", name="generate_explanation_stream")
+            async def create_llm_stream():
+                # Build prompt - format verses WITHOUT bold so LLM doesn't mimic that pattern
+                verses_text = "\n\n".join([
+                    f"{v.ref}{' (' + v.translation + ')' if v.translation != 'Original' else ''}: \"{v.text[:300]}...\""
+                    for v in verses
+                ])
+                verse_refs = ", ".join([v.ref for v in verses])
+                
+                # Get system prompt based on tradition
+                if request.tradition == "jewish":
+                    system_prompt = """You are a compassionate Jewish guide. Write 2-4 paragraphs of comfort and encouragement using ONLY the Torah/Tanakh verses provided.
+
+CRITICAL RULES:
+- ONLY reference the specific verses provided below - DO NOT mention any other verses
+- Use **bold** for the exact verse references INLINE within sentences (e.g., "as it says in **Psalm 55:22**")
+- NEVER put verse references on their own separate line
+- Start immediately with empathy and understanding
+- Focus on hope, comfort, and Hashem's love
+- Use warm, personal "you" language
+- Reference Jewish concepts naturally (Torah, mitzvot, tikkun olam)
+- Avoid: Christian terminology, New Testament, made-up citations
+- Do NOT say "I'm thinking of you", "I'll be praying for you"
+
+Just write the encouragement directly using ONLY the provided verses."""
+                elif request.tradition == "harry_potter":
+                    system_prompt = """You are a compassionate guide who finds wisdom in stories. Write 2-4 paragraphs of comfort and encouragement using ONLY the Harry Potter passages provided.
+
+CRITICAL RULES:
+- ONLY reference the specific passages provided below - DO NOT mention any other scenes
+- Use **bold** for the exact references INLINE within sentences (e.g., "as we see in **Deathly Hallows, Chapter 33**")
+- NEVER put references on their own separate line
+- Start immediately with empathy and understanding
+- Draw parallels between their situation and the themes in the passages (courage, friendship, overcoming fear, belonging, loss, hope)
+- Reference characters, moments, and themes naturally (Harry's courage, Dumbledore's wisdom, the power of friendship)
+- Use warm, personal "you" language - connect the story's wisdom to their life
+- Avoid: religious language, made-up scenes, personal sign-offs
+- Do NOT say "I'm thinking of you", "May you find peace"
+
+Just write the encouragement directly, connecting the story's wisdom to their experience using ONLY the provided passages."""
+                else:  # christian
+                    system_prompt = """You are a compassionate, non-denominational Christian guide. Write 2-4 paragraphs of comfort and encouragement using ONLY the Bible verses provided.
+
+CRITICAL RULES:
+- ONLY reference the specific verses provided below - DO NOT mention any other verses
+- Use **bold** for the exact verse references INLINE within sentences (e.g., "as it says in **Psalm 23:1**")
+- NEVER put verse references on their own separate line
+- Start immediately with empathy and understanding
+- Focus on hope, comfort, and God's love
+- Use warm, personal "you" language
+- Avoid: theological jargon, made-up citations, personal sign-offs
+- Do NOT say "I'm thinking of you", "I'll be praying for you"
+
+Just write the encouragement directly using ONLY the provided verses."""
+                
+                user_prompt = f"""Person's concern: "{request.issue}"
+
+The ONLY passages you may reference are: {verse_refs}
+
+Here are the passages:
+
+{verses_text}
+
+Write your response (2-4 paragraphs) using ONLY these passages."""
+                
+                # Stream from LLM
+                return await openai_client.chat.completions.create(
+                    extra_headers={
+                        "HTTP-Referer": "https://solace.app",
+                        "X-Title": "Solace"
+                    },
+                    model=LLM_MODEL,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    temperature=LLM_TEMPERATURE,
+                    max_tokens=600,
+                    stream=True
+                )
+            
+            # Get the stream within traced context
+            stream = await create_llm_stream()
+            
+            # Accumulate chunks for cleaning
+            full_text = ""
+            async for chunk in stream:
+                if chunk.choices[0].delta.content:
+                    content = chunk.choices[0].delta.content
+                    full_text += content
+                    
+                    # Clean content in real-time to remove special tokens
+                    cleaned_content = content
+                    # Remove special tokens from chunks
+                    special_tokens = [
+                        r'<\|begin_of_sentence\|>',
+                        r'<｜begin▁of▁sentence｜>',
+                        r'<｜begin of sentence｜>',
+                        r'<\|end_of_text\|>',
+                        r'<｜end▁of▁text｜>',
+                        r'<eos>',
+                        r'</s>'
+                    ]
+                    for token in special_tokens:
+                        cleaned_content = re.sub(token, '', cleaned_content, flags=re.IGNORECASE)
+                    
+                    # Only send if there's content after cleaning
+                    if cleaned_content:
+                        data = {
+                            "type": "explanation_chunk",
+                            "content": cleaned_content
+                        }
+                        yield f"data: {json.dumps(data)}\n\n"
+            
+            # Send done signal
+            yield f"data: {json.dumps({'type': 'done'})}\n\n"
+            
+        except Exception as e:
+            print(f"Error in stream: {e}", flush=True)
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
     
-    return RecommendResponse(
-        verses=verses,
-        explanation=explanation
-    )
+    return StreamingResponse(generate_stream(), media_type="text/event-stream")
 
 
 @app.get("/")
@@ -534,13 +529,14 @@ async def root():
     """Root endpoint with API info"""
     return {
         "name": "Solace - Find Comfort in the Texts You Love",
-        "version": "0.4.0",
-        "status": "Pinecone + DeepSeek ✅",
+        "version": "0.6.0",
+        "status": "Pinecone + DeepSeek V3.1 + Streaming ✅",
         "sources": ["Bible (Christian)", "Torah/Tanakh (Jewish)", "Harry Potter"],
         "memory": "~200MB (serverless embeddings)",
+        "features": ["Streaming responses", "Real-time LLM generation", "Book diversity filtering"],
         "endpoints": {
             "health": "/healthz",
-            "recommend": "POST /recommend",
+            "recommend": "POST /recommend/stream (streaming SSE)",
             "docs": "/docs"
         }
     }

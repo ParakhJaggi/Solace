@@ -7,23 +7,10 @@
 
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL
 const MAX_CHARS = 500
-
-// Simple markdown-to-HTML converter for bold and italic
-function parseMarkdown(text) {
-  if (!text) return text
-  
-  // Bold: **text** → <strong>text</strong>
-  let parsed = text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-  
-  // Italic: *text* → <em>text</em> (single asterisks not already part of bold)
-  parsed = parsed.replace(/\*([^*]+)\*/g, '<em>$1</em>')
-  
-  return parsed
-}
 
 export default function Home() {
   const [concern, setConcern] = useState('')
@@ -31,6 +18,8 @@ export default function Home() {
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState(null)
   const [error, setError] = useState(null)
+  const [streamingExplanation, setStreamingExplanation] = useState('')
+  const [isStreaming, setIsStreaming] = useState(false)
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -43,9 +32,11 @@ export default function Home() {
     setLoading(true)
     setError(null)
     setResult(null)
+    setStreamingExplanation('')
+    setIsStreaming(false)
 
     try {
-      const response = await fetch(`${API_URL}/recommend`, {
+      const response = await fetch(`${API_URL}/recommend/stream`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -60,21 +51,63 @@ export default function Home() {
         throw new Error('Unable to connect. Please try again.')
       }
 
-      const data = await response.json()
-      setResult(data)
-      
-      // Scroll to results
-      setTimeout(() => {
-        document.getElementById('results')?.scrollIntoView({ 
-          behavior: 'smooth', 
-          block: 'start' 
-        })
-      }, 100)
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let tempVerses = null
+      let tempExplanation = ''
+
+      while (true) {
+        const { value, done } = await reader.read()
+        if (done) break
+
+        const chunk = decoder.decode(value)
+        const lines = chunk.split('\n')
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6))
+              
+              if (data.type === 'verses') {
+                // Store verses and show them immediately
+                tempVerses = data.verses
+                setResult({ verses: tempVerses, explanation: '' })
+                setLoading(false) // Stop loading spinner once verses appear
+                
+                // Scroll to results
+                setTimeout(() => {
+                  document.getElementById('results')?.scrollIntoView({ 
+                    behavior: 'smooth', 
+                    block: 'start' 
+                  })
+                }, 100)
+              } else if (data.type === 'explanation_chunk') {
+                // Stream explanation text
+                tempExplanation += data.content
+                setIsStreaming(true)
+                setStreamingExplanation(tempExplanation)
+              } else if (data.type === 'done') {
+                // Finalize
+                setIsStreaming(false)
+                setResult({ 
+                  verses: tempVerses, 
+                  explanation: tempExplanation 
+                })
+                setStreamingExplanation('')
+              } else if (data.error) {
+                throw new Error(data.error)
+              }
+            } catch (parseError) {
+              console.error('Parse error:', parseError)
+            }
+          }
+        }
+      }
       
     } catch (err) {
       setError(err.message || 'Something went wrong. Please try again.')
-    } finally {
       setLoading(false)
+      setIsStreaming(false)
     }
   }
 
@@ -82,7 +115,59 @@ export default function Home() {
     setConcern('')
     setResult(null)
     setError(null)
+    setStreamingExplanation('')
+    setIsStreaming(false)
   }
+
+  // Memoize results section to prevent re-renders when typing
+  const resultsSection = useMemo(() => {
+    if (!result && !isStreaming) return null
+    
+    // Get the current explanation text (streaming or final)
+    const explanationText = isStreaming ? streamingExplanation : (result?.explanation || '')
+    
+    return (
+      <div id="results" className="space-y-6 animate-fade-in">
+        {/* Explanation */}
+        {explanationText && (
+          <div className="bg-warmBeige rounded-xl p-6 md:p-8 border border-warmBeige">
+            <div 
+              className="prose lg:prose-lg prose-pre:p-0 prose-pre:m-0 prose-pre:bg-transparent text-deepBlue max-w-none"
+              dangerouslySetInnerHTML={{ 
+                __html: explanationText.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>') 
+              }}
+            />
+          </div>
+        )}
+
+        {/* Verses */}
+        {result?.verses && (
+          <div>
+            <h2 className="text-xl font-serif text-deepBlue mb-4">
+              References
+            </h2>
+            <div className="space-y-4">
+              {result.verses.map((verse, index) => (
+                <div key={index} className="verse-card">
+                  <div className="flex items-start justify-between gap-4 mb-3">
+                    <h3 className="font-serif text-lg text-deepBlue">
+                      {verse.ref}
+                    </h3>
+                    <span className="text-xs text-gentleGray bg-warmBeige px-3 py-1 rounded-full">
+                      {verse.translation}
+                    </span>
+                  </div>
+                  <p className="text-deepBlue leading-relaxed italic">
+                    "{verse.text}"
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }, [result, isStreaming, streamingExplanation])
 
   return (
     <main className="min-h-screen">
@@ -226,44 +311,10 @@ export default function Home() {
         </div>
 
         {/* Results Section */}
-        {result && (
-          <div id="results" className="space-y-6 animate-fade-in">
-            {/* Explanation */}
-            <div className="bg-warmBeige rounded-xl p-6 md:p-8 border border-warmBeige">
-              <div 
-                className="text-deepBlue leading-relaxed text-lg whitespace-pre-wrap"
-                dangerouslySetInnerHTML={{ __html: parseMarkdown(result.explanation) }}
-              />
-            </div>
-
-            {/* Verses */}
-            <div>
-              <h2 className="text-xl font-serif text-deepBlue mb-4">
-                References
-              </h2>
-              <div className="space-y-4">
-                {result.verses.map((verse, index) => (
-                  <div key={index} className="verse-card">
-                    <div className="flex items-start justify-between gap-4 mb-3">
-                      <h3 className="font-serif text-lg text-deepBlue">
-                        {verse.ref}
-                      </h3>
-                      <span className="text-xs text-gentleGray bg-warmBeige px-3 py-1 rounded-full">
-                        {verse.translation}
-                      </span>
-                    </div>
-                    <p className="text-deepBlue leading-relaxed italic">
-                      "{verse.text}"
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
+        {resultsSection}
 
         {/* Empty State */}
-        {!result && !loading && (
+        {!result && !loading && !isStreaming && (
           <div className="text-center py-12">
             <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-warmBeige mb-4">
               <svg 
